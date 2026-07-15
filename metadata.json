@@ -1,0 +1,6 @@
+{
+  "name": "Rekap Data Customer",
+  "description": "Aplikasi untuk merekap data customer yang terintegrasi dengan Google Sheets untuk input, pencarian, dan ekspor data.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
