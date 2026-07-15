@@ -258,6 +258,17 @@ export default function App() {
     }, 4000);
   };
 
+  // Phone number sanitizer to replace +62/62 with 0
+  const sanitizePhoneNumber = (val: string): string => {
+    let trimmed = val.trim();
+    if (trimmed.startsWith('+62')) {
+      trimmed = '0' + trimmed.slice(3);
+    } else if (trimmed.startsWith('62')) {
+      trimmed = '0' + trimmed.slice(2);
+    }
+    return trimmed;
+  };
+
   // Form submit (Add or Edit)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -271,7 +282,7 @@ export default function App() {
 
     const payload = {
       name: formName.trim(),
-      phone: formPhone.trim(),
+      phone: sanitizePhoneNumber(formPhone),
       address: formAddress.trim(),
       priceUsed: formPriceUsed.trim(),
       keterangan: formKeterangan.trim(),
@@ -832,8 +843,16 @@ export default function App() {
                   <input
                     type="text"
                     value={formPhone}
-                    onChange={(e) => setFormPhone(e.target.value)}
-                    placeholder="e.g. +62 812..."
+                    onChange={(e) => {
+                      let val = e.target.value;
+                      if (val.startsWith('+62')) {
+                        val = '0' + val.slice(3);
+                      } else if (val.startsWith('62') && val.length > 2) {
+                        val = '0' + val.slice(2);
+                      }
+                      setFormPhone(val);
+                    }}
+                    placeholder="e.g. 0812..."
                     disabled={!accessToken && connectionMode !== 'apps-script'}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:bg-white focus:border-blue-400 transition-all"
                   />
@@ -1086,19 +1105,18 @@ export default function App() {
 
                         return (
                           <tr key={customer.id} className="group hover:bg-slate-50/50 transition-colors">
-                            <td className="py-4 pr-3">
-                              <p className="text-sm font-bold text-slate-900 leading-snug">{customer.name}</p>
-                              <div className="flex items-center space-x-1.5 mt-1">
-                                <span className="text-[10px] text-slate-400 font-semibold font-mono">No Telpon:</span>
+                            <td className="py-4 pr-3 whitespace-nowrap">
+                              <div className="flex items-center space-x-2 text-sm">
+                                <span className="font-bold text-slate-900">{customer.name}</span>
                                 {customer.phone ? (
                                   <a 
                                     href={`tel:${customer.phone}`}
-                                    className="inline-flex items-center space-x-0.5 text-[11px] text-blue-600 hover:text-blue-800 font-bold hover:underline"
+                                    className="inline-flex items-center text-xs text-blue-600 hover:text-blue-800 font-bold hover:underline bg-blue-50/70 px-2 py-0.5 rounded-full font-mono"
                                   >
-                                    <span>{customer.phone}</span>
+                                    {customer.phone}
                                   </a>
                                 ) : (
-                                  <span className="text-[10px] text-slate-300 italic font-mono">-</span>
+                                  <span className="text-xs text-slate-300 italic">-</span>
                                 )}
                               </div>
                             </td>
