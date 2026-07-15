@@ -1070,13 +1070,13 @@ export default function App() {
                     </p>
                   </div>
                 ) : (
-                  <table className="w-full text-left min-w-[720px]">
+                  <table className="w-full text-left">
                     <thead>
                       <tr className="border-b border-slate-100">
-                        <th className="pb-4 text-xs font-bold text-slate-400 uppercase tracking-wider min-w-[160px]">Customer</th>
-                        <th className="pb-4 text-xs font-bold text-slate-400 uppercase tracking-wider min-w-[260px]">Alamat</th>
-                        <th className="pb-4 text-xs font-bold text-slate-400 uppercase tracking-wider min-w-[100px]">Harga</th>
-                        <th className="pb-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-right min-w-[160px]">Mode Pembayaran</th>
+                        <th className="pb-4 text-xs font-bold text-slate-400 uppercase tracking-wider w-[25%]">Customer</th>
+                        <th className="pb-4 text-xs font-bold text-slate-400 uppercase tracking-wider w-[40%]">Alamat</th>
+                        <th className="pb-4 text-xs font-bold text-slate-400 uppercase tracking-wider w-[15%]">Harga</th>
+                        <th className="pb-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-right w-[20%]">Mode Pembayaran</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
@@ -1103,7 +1103,7 @@ export default function App() {
                               </div>
                             </td>
                             
-                            <td className="py-4 pr-3 text-xs text-slate-600 min-w-[260px]">
+                            <td className="py-4 pr-3 text-xs text-slate-600 break-words">
                               {customer.address ? (
                                 <div className="space-y-1">
                                   <p className="whitespace-normal break-words" title={customer.address}>{customer.address}</p>
