@@ -26,7 +26,8 @@ import {
   Lock,
   ArrowRight,
   Copy,
-  Code
+  Code,
+  Printer
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, initAuth, googleSignIn, logout, getAccessToken } from './firebase';
@@ -94,6 +95,15 @@ export default function App() {
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [tempSpreadsheetId, setTempSpreadsheetId] = useState(spreadsheetId);
   const [tempSheetName, setTempSheetName] = useState(sheetName);
+
+  // Thermal print states
+  const [printingCustomer, setPrintingCustomer] = useState<Customer | null>(null);
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printText, setPrintText] = useState('');
+  const [printPaperWidth, setPrintPaperWidth] = useState<'58mm' | '80mm'>('58mm');
+  const [optDibantuSiapkan, setOptDibantuSiapkan] = useState(true);
+  const [optKeterangan, setOptKeterangan] = useState(true);
+  const [optPembayaran, setOptPembayaran] = useState(true);
 
   // Google Apps Script States
   const [connectionMode, setConnectionMode] = useState<'sheets-api' | 'apps-script'>(() => {
@@ -214,6 +224,50 @@ export default function App() {
   useEffect(() => {
     loadData();
   }, [spreadsheetId, sheetName, accessToken, connectionMode, appsScriptUrl]);
+
+  // Effect to dynamically update Thermal Print text template
+  useEffect(() => {
+    if (printingCustomer) {
+      const lines: string[] = [];
+      const nameUpper = printingCustomer.name.toUpperCase();
+      const phoneStr = printingCustomer.phone ? ` (${printingCustomer.phone})` : '';
+      lines.push(`${nameUpper}${phoneStr}`);
+      
+      if (printingCustomer.address) {
+        lines.push(printingCustomer.address);
+      }
+      
+      if (optDibantuSiapkan) {
+        lines.push('- DIBANTU SIAPKAN');
+      }
+      
+      if (optKeterangan) {
+        if (printingCustomer.keterangan) {
+          lines.push(`- ${printingCustomer.keterangan.toUpperCase()}`);
+        } else {
+          lines.push('- DIKIRIM');
+        }
+      }
+      
+      if (optPembayaran) {
+        if (printingCustomer.pembayaran) {
+          lines.push(`- ${printingCustomer.pembayaran.toUpperCase()}`);
+        } else {
+          lines.push('- TRANSFER');
+        }
+      }
+      
+      setPrintText(lines.join('\n'));
+    }
+  }, [printingCustomer, optDibantuSiapkan, optKeterangan, optPembayaran]);
+
+  const handleStartPrint = (customer: Customer) => {
+    setPrintingCustomer(customer);
+    setOptDibantuSiapkan(true);
+    setOptKeterangan(true);
+    setOptPembayaran(true);
+    setShowPrintModal(true);
+  };
 
   // Auth Action Handlers
   const handleLogin = async () => {
@@ -1109,10 +1163,10 @@ export default function App() {
                               <div className="flex flex-col space-y-1 text-sm">
                                 <span className="font-bold text-slate-900 break-words">{customer.name}</span>
                                 {customer.phone ? (
-                                  <div>
+                                  <div className="whitespace-nowrap">
                                     <a 
                                       href={`tel:${customer.phone}`}
-                                      className="inline-flex items-center text-xs text-blue-600 hover:text-blue-800 font-bold hover:underline bg-blue-50/70 px-2 py-0.5 rounded-full font-mono"
+                                      className="inline-flex items-center text-xs text-blue-600 hover:text-blue-800 font-bold hover:underline bg-blue-50/70 px-2 py-0.5 rounded-full font-mono whitespace-nowrap"
                                     >
                                       {customer.phone}
                                     </a>
@@ -1172,26 +1226,36 @@ export default function App() {
                                 </div>
 
                                 {/* Hover visible Action Controls */}
-                                {(accessToken || connectionMode === 'apps-script') && (
-                                  <div className="flex items-center space-x-1 mt-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                                    <button
-                                      onClick={() => handleStartEdit(customer)}
-                                      className="p-1 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded transition-colors cursor-pointer"
-                                      title="Edit record"
-                                      id={`btn-edit-${customer.id}`}
-                                    >
-                                      <Edit2 className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDelete(customer)}
-                                      className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer"
-                                      title="Delete record"
-                                      id={`btn-delete-${customer.id}`}
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                )}
+                                <div className="flex items-center justify-end space-x-1 mt-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                                  <button
+                                    onClick={() => handleStartPrint(customer)}
+                                    className="p-1 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors cursor-pointer"
+                                    title="Print to Thermal Printer"
+                                    id={`btn-print-${customer.id}`}
+                                  >
+                                    <Printer className="w-3.5 h-3.5" />
+                                  </button>
+                                  {(accessToken || connectionMode === 'apps-script') && (
+                                    <>
+                                      <button
+                                        onClick={() => handleStartEdit(customer)}
+                                        className="p-1 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded transition-colors cursor-pointer"
+                                        title="Edit record"
+                                        id={`btn-edit-${customer.id}`}
+                                      >
+                                        <Edit2 className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDelete(customer)}
+                                        className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                                        title="Delete record"
+                                        id={`btn-delete-${customer.id}`}
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
                               </div>
                             </td>
                           </tr>
@@ -1720,6 +1784,214 @@ function doPost(e) {
           </div>
         )}
       </AnimatePresence>
+
+      {/* MODAL 3: THERMAL PRINTER MODAL */}
+      <AnimatePresence>
+        {showPrintModal && printingCustomer && (
+          <div className="fixed inset-0 z-50 overflow-y-auto" id="print-modal">
+            {/* Backdrop */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowPrintModal(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+            ></motion.div>
+
+            {/* Content Container */}
+            <div className="flex min-h-screen items-center justify-center p-4 relative">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden relative border border-slate-100 flex flex-col md:flex-row text-slate-800"
+              >
+                {/* Left Column: Configuration & Controls */}
+                <div className="flex-1 p-6 space-y-6 flex flex-col justify-between">
+                  <div>
+                    {/* Header */}
+                    <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                      <div className="flex items-center space-x-2.5">
+                        <Printer className="w-5 h-5 text-emerald-600" />
+                        <h3 className="font-bold text-base text-slate-800">Thermal Printer Menu</h3>
+                      </div>
+                      <button 
+                        onClick={() => setShowPrintModal(false)}
+                        className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer md:hidden"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    {/* Content Options */}
+                    <div className="space-y-4 mt-5">
+                      <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">PILIHAN RINCIAN</p>
+                        <div className="space-y-2.5">
+                          <label className="flex items-center space-x-3 text-sm font-semibold text-slate-700 cursor-pointer select-none">
+                            <input 
+                              type="checkbox" 
+                              checked={optDibantuSiapkan} 
+                              onChange={(e) => setOptDibantuSiapkan(e.target.checked)}
+                              className="w-4.5 h-4.5 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
+                            />
+                            <span>Include "- DIBANTU SIAPKAN"</span>
+                          </label>
+
+                          <label className="flex items-center space-x-3 text-sm font-semibold text-slate-700 cursor-pointer select-none">
+                            <input 
+                              type="checkbox" 
+                              checked={optKeterangan} 
+                              onChange={(e) => setOptKeterangan(e.target.checked)}
+                              className="w-4.5 h-4.5 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
+                            />
+                            <span>Include Keterangan ({printingCustomer.keterangan || 'DIKIRIM'})</span>
+                          </label>
+
+                          <label className="flex items-center space-x-3 text-sm font-semibold text-slate-700 cursor-pointer select-none">
+                            <input 
+                              type="checkbox" 
+                              checked={optPembayaran} 
+                              onChange={(e) => setOptPembayaran(e.target.checked)}
+                              className="w-4.5 h-4.5 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
+                            />
+                            <span>Include Pembayaran ({printingCustomer.pembayaran || 'TRANSFER'})</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Custom Template Editor */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+                          EDIT TEKS STRUK (KUSTOMISASI BEBAS)
+                        </label>
+                        <textarea
+                          rows={6}
+                          value={printText}
+                          onChange={(e) => setPrintText(e.target.value)}
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-mono outline-none focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all resize-none text-slate-800"
+                          placeholder="Ketik teks kustom struk di sini..."
+                        />
+                      </div>
+
+                      {/* Width settings */}
+                      <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">UKURAN KERTAS RECEIPT</p>
+                        <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
+                          <button
+                            type="button"
+                            onClick={() => setPrintPaperWidth('58mm')}
+                            className={`py-1.5 px-3 text-xs font-bold rounded-lg transition-all cursor-pointer text-center ${
+                              printPaperWidth === '58mm'
+                                ? 'bg-white text-slate-900 shadow-sm'
+                                : 'text-slate-500 hover:text-slate-900'
+                            }`}
+                          >
+                            58mm (Standar)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPrintPaperWidth('80mm')}
+                            className={`py-1.5 px-3 text-xs font-bold rounded-lg transition-all cursor-pointer text-center ${
+                              printPaperWidth === '80mm'
+                                ? 'bg-white text-slate-900 shadow-sm'
+                                : 'text-slate-500 hover:text-slate-900'
+                            }`}
+                          >
+                            80mm (Lebar)
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="pt-4 border-t border-slate-100 space-y-2 mt-4 md:mt-0">
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(printText);
+                            showToast('Teks struk berhasil disalin!');
+                          } catch (err) {
+                            showToast('Gagal menyalin teks.');
+                          }
+                        }}
+                        className="py-2.5 px-4 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all cursor-pointer flex items-center justify-center space-x-1.5"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Salin Teks</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          window.print();
+                        }}
+                        className="py-2.5 px-4 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center space-x-1.5"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span>Cetak Struk</span>
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => setShowPrintModal(false)}
+                      className="w-full py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                    >
+                      Tutup
+                    </button>
+                  </div>
+                </div>
+
+                {/* Right Column: Live Struk Preview (The "Paper" view) */}
+                <div className="w-full md:w-[260px] bg-slate-50 p-6 flex flex-col items-center justify-center border-t md:border-t-0 md:border-l border-slate-100 relative">
+                  <div className="absolute top-4 right-4 hidden md:block">
+                    <button 
+                      onClick={() => setShowPrintModal(false)}
+                      className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">LIVE PREVIEW</p>
+                  
+                  {/* The Thermal Paper Receipt UI Container */}
+                  <div className="w-full bg-white shadow-md border border-slate-200 p-4 rounded-b-md relative overflow-hidden flex flex-col justify-between min-h-[280px]">
+                    {/* Top jagged paper line decoration */}
+                    <div className="absolute top-0 left-0 right-0 h-1 flex justify-between">
+                      {Array.from({ length: 24 }).map((_, i) => (
+                        <div key={i} className="w-2 h-2 bg-slate-50 rotate-45 transform -translate-y-1" />
+                      ))}
+                    </div>
+
+                    <div className="mt-2 flex-1">
+                      {/* Monospace receipt preview matching the exact fonts */}
+                      <pre className="text-[11px] font-mono font-medium text-slate-800 leading-relaxed whitespace-pre-wrap select-text break-words">
+                        {printText}
+                      </pre>
+                    </div>
+
+                    {/* Bottom dashed border */}
+                    <div className="border-t border-dashed border-slate-300 mt-4 pt-2 text-center">
+                      <p className="text-[8px] font-mono text-slate-400 uppercase tracking-widest">Thermal Receipt Mode</p>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Hidden Print Element */}
+      <div 
+        id="thermal-print-area" 
+        className="hidden"
+        style={{ 
+          width: printPaperWidth === '58mm' ? '58mm' : '80mm',
+        }}
+      >
+        {printText}
+      </div>
 
     </div>
   );
