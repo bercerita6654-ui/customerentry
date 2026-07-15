@@ -27,7 +27,18 @@ import {
   ArrowRight,
   Copy,
   Code,
-  Printer
+  Printer,
+  ArrowUp,
+  ArrowDown,
+  Bold,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  Type,
+  ChevronUp,
+  ChevronDown,
+  RotateCcw,
+  FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, initAuth, googleSignIn, logout, getAccessToken } from './firebase';
@@ -45,6 +56,13 @@ import {
   deleteCustomerViaAppsScript
 } from './services/sheetsService';
 import { Customer } from './types';
+
+export interface PrintLine {
+  text: string;
+  isBold: boolean;
+  size: 'sm' | 'md' | 'lg' | 'xl';
+  align: 'left' | 'center' | 'right';
+}
 
 // Default config values
 const DEFAULT_SPREADSHEET_ID = '1b0vLGhuCqPekEEBP5Ps4ueGETyHedYLskduGmen_Qow';
@@ -104,6 +122,10 @@ export default function App() {
   const [optDibantuSiapkan, setOptDibantuSiapkan] = useState(true);
   const [optKeterangan, setOptKeterangan] = useState(true);
   const [optPembayaran, setOptPembayaran] = useState(true);
+  const [printLines, setPrintLines] = useState<PrintLine[]>([]);
+  const [printFontFamily, setPrintFontFamily] = useState<'mono' | 'sans' | 'serif'>('sans');
+  const [printBaseSize, setPrintBaseSize] = useState<'xs' | 'sm' | 'base' | 'lg'>('sm');
+  const [activeLineIndex, setActiveLineIndex] = useState<number | null>(0);
 
   // Google Apps Script States
   const [connectionMode, setConnectionMode] = useState<'sheets-api' | 'apps-script'>(() => {
@@ -225,47 +247,221 @@ export default function App() {
     loadData();
   }, [spreadsheetId, sheetName, accessToken, connectionMode, appsScriptUrl]);
 
-  // Effect to dynamically update Thermal Print text template
+  // Function to build default print lines from customer & option states
+  const generateDefaultPrintLines = (customer: Customer, showSiapkan: boolean, showKet: boolean, showPem: boolean): PrintLine[] => {
+    const lines: PrintLine[] = [];
+    
+    // 1. Name & Phone
+    const nameUpper = customer.name.toUpperCase();
+    const phoneStr = customer.phone ? ` (${customer.phone})` : '';
+    lines.push({
+      text: `${nameUpper}${phoneStr}`,
+      isBold: true,
+      size: 'md',
+      align: 'left'
+    });
+    
+    // 2. Address
+    if (customer.address) {
+      lines.push({
+        text: customer.address,
+        isBold: false,
+        size: 'sm',
+        align: 'left'
+      });
+    }
+    
+    // 3. Dibantu Siapkan
+    if (showSiapkan) {
+      lines.push({
+        text: '- DIBANTU SIAPKAN',
+        isBold: false,
+        size: 'sm',
+        align: 'left'
+      });
+    }
+    
+    // 4. Keterangan
+    if (showKet) {
+      const ketText = customer.keterangan ? `- ${customer.keterangan.toUpperCase()}` : '- DIKIRIM';
+      lines.push({
+        text: ketText,
+        isBold: false,
+        size: 'sm',
+        align: 'left'
+      });
+    }
+    
+    // 5. Pembayaran
+    if (showPem) {
+      const pemText = customer.pembayaran ? `- ${customer.pembayaran.toUpperCase()}` : '- TRANSFER';
+      lines.push({
+        text: pemText,
+        isBold: false,
+        size: 'sm',
+        align: 'left'
+      });
+    }
+    
+    return lines;
+  };
+
+  // Effect to set up lines when customer or simple options change
   useEffect(() => {
     if (printingCustomer) {
-      const lines: string[] = [];
-      const nameUpper = printingCustomer.name.toUpperCase();
-      const phoneStr = printingCustomer.phone ? ` (${printingCustomer.phone})` : '';
-      lines.push(`${nameUpper}${phoneStr}`);
-      
-      if (printingCustomer.address) {
-        lines.push(printingCustomer.address);
-      }
-      
-      if (optDibantuSiapkan) {
-        lines.push('- DIBANTU SIAPKAN');
-      }
-      
-      if (optKeterangan) {
-        if (printingCustomer.keterangan) {
-          lines.push(`- ${printingCustomer.keterangan.toUpperCase()}`);
-        } else {
-          lines.push('- DIKIRIM');
-        }
-      }
-      
-      if (optPembayaran) {
-        if (printingCustomer.pembayaran) {
-          lines.push(`- ${printingCustomer.pembayaran.toUpperCase()}`);
-        } else {
-          lines.push('- TRANSFER');
-        }
-      }
-      
-      setPrintText(lines.join('\n'));
+      const defaultLines = generateDefaultPrintLines(
+        printingCustomer, 
+        optDibantuSiapkan, 
+        optKeterangan, 
+        optPembayaran
+      );
+      setPrintLines(defaultLines);
     }
   }, [printingCustomer, optDibantuSiapkan, optKeterangan, optPembayaran]);
+
+  // Effect to dynamically update Thermal Print text template (for copy/paste or text editor)
+  useEffect(() => {
+    if (printLines.length > 0) {
+      const plainText = printLines.map(line => line.text).join('\n');
+      setPrintText(plainText);
+    }
+  }, [printLines]);
+
+  const handleAddLine = (index?: number) => {
+    const insertAt = index !== undefined ? index + 1 : printLines.length;
+    const newLine: PrintLine = { text: '', isBold: false, size: 'sm', align: 'left' };
+    const newLines = [...printLines];
+    newLines.splice(insertAt, 0, newLine);
+    setPrintLines(newLines);
+    setActiveLineIndex(insertAt);
+    
+    setTimeout(() => {
+      const inputEl = document.getElementById(`line-input-${insertAt}`);
+      if (inputEl) {
+        (inputEl as HTMLInputElement).focus();
+      }
+    }, 50);
+  };
+
+  const handleDeleteLine = (index: number) => {
+    if (printLines.length <= 1) {
+      const newLines = [...printLines];
+      newLines[0] = { text: '', isBold: false, size: 'sm', align: 'left' };
+      setPrintLines(newLines);
+      setActiveLineIndex(0);
+      return;
+    }
+    const newLines = printLines.filter((_, i) => i !== index);
+    setPrintLines(newLines);
+    
+    const nextFocusIndex = Math.max(0, index - 1);
+    setActiveLineIndex(nextFocusIndex);
+    setTimeout(() => {
+      const inputEl = document.getElementById(`line-input-${nextFocusIndex}`);
+      if (inputEl) {
+        (inputEl as HTMLInputElement).focus();
+      }
+    }, 50);
+  };
+
+  const handleLineKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, idx: number) => {
+    const inputEl = e.currentTarget;
+    const val = inputEl.value;
+    const start = inputEl.selectionStart ?? 0;
+    const end = inputEl.selectionEnd ?? 0;
+
+    if (e.key === 'ArrowUp') {
+      if (idx > 0) {
+        e.preventDefault();
+        setActiveLineIndex(idx - 1);
+        setTimeout(() => {
+          const prevInput = document.getElementById(`line-input-${idx - 1}`) as HTMLInputElement | null;
+          if (prevInput) {
+            prevInput.focus();
+            const newPos = Math.min(start, prevInput.value.length);
+            prevInput.setSelectionRange(newPos, newPos);
+          }
+        }, 10);
+      }
+    } else if (e.key === 'ArrowDown') {
+      if (idx < printLines.length - 1) {
+        e.preventDefault();
+        setActiveLineIndex(idx + 1);
+        setTimeout(() => {
+          const nextInput = document.getElementById(`line-input-${idx + 1}`) as HTMLInputElement | null;
+          if (nextInput) {
+            nextInput.focus();
+            const newPos = Math.min(start, nextInput.value.length);
+            nextInput.setSelectionRange(newPos, newPos);
+          }
+        }, 10);
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      // Split current line at cursor
+      const leftText = val.substring(0, start);
+      const rightText = val.substring(end);
+
+      const newLines = [...printLines];
+      newLines[idx] = { ...newLines[idx], text: leftText };
+      
+      const newLine: PrintLine = {
+        text: rightText,
+        isBold: newLines[idx].isBold,
+        size: newLines[idx].size,
+        align: newLines[idx].align
+      };
+      newLines.splice(idx + 1, 0, newLine);
+      setPrintLines(newLines);
+      setActiveLineIndex(idx + 1);
+
+      setTimeout(() => {
+        const nextInput = document.getElementById(`line-input-${idx + 1}`) as HTMLInputElement | null;
+        if (nextInput) {
+          nextInput.focus();
+          nextInput.setSelectionRange(0, 0);
+        }
+      }, 10);
+    } else if (e.key === 'Backspace') {
+      // If cursor is at the very beginning of the line, merge with the line above
+      if (start === 0 && end === 0) {
+        if (idx > 0) {
+          e.preventDefault();
+          const prevLineText = printLines[idx - 1].text;
+          const currentLineText = val;
+          
+          const newLines = printLines.filter((_, i) => i !== idx);
+          newLines[idx - 1] = {
+            ...newLines[idx - 1],
+            text: prevLineText + currentLineText
+          };
+          
+          setPrintLines(newLines);
+          setActiveLineIndex(idx - 1);
+
+          setTimeout(() => {
+            const prevInput = document.getElementById(`line-input-${idx - 1}`) as HTMLInputElement | null;
+            if (prevInput) {
+              prevInput.focus();
+              prevInput.setSelectionRange(prevLineText.length, prevLineText.length);
+            }
+          }, 10);
+        }
+      }
+    }
+  };
 
   const handleStartPrint = (customer: Customer) => {
     setPrintingCustomer(customer);
     setOptDibantuSiapkan(true);
     setOptKeterangan(true);
     setOptPembayaran(true);
+    setPrintFontFamily('sans');
+    setPrintBaseSize('sm');
+    
+    const initialLines = generateDefaultPrintLines(customer, true, true, true);
+    setPrintLines(initialLines);
+    setActiveLineIndex(0);
     setShowPrintModal(true);
   };
 
@@ -1804,101 +2000,382 @@ function doPost(e) {
                 initial={{ opacity: 0, scale: 0.95, y: 15 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 15 }}
-                className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden relative border border-slate-100 flex flex-col md:flex-row text-slate-800"
+                className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden relative border border-slate-100 flex flex-col md:flex-row text-slate-800"
               >
                 {/* Left Column: Configuration & Controls */}
-                <div className="flex-1 p-6 space-y-6 flex flex-col justify-between">
-                  <div>
+                <div className="flex-1 p-6 space-y-5 flex flex-col justify-between max-h-[90vh] overflow-y-auto">
+                  <div className="space-y-5">
                     {/* Header */}
                     <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                       <div className="flex items-center space-x-2.5">
                         <Printer className="w-5 h-5 text-emerald-600" />
-                        <h3 className="font-bold text-base text-slate-800">Thermal Printer Menu</h3>
+                        <div>
+                          <h3 className="font-bold text-base text-slate-800">Cetak Thermal Printer</h3>
+                          <p className="text-[11px] text-slate-400">Atur font, ukuran teks, cetak tebal, dan susunan rincian</p>
+                        </div>
                       </div>
                       <button 
                         onClick={() => setShowPrintModal(false)}
-                        className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer md:hidden"
+                        className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg transition-colors cursor-pointer"
                       >
                         <X className="w-5 h-5" />
                       </button>
                     </div>
 
-                    {/* Content Options */}
-                    <div className="space-y-4 mt-5">
-                      <div>
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">PILIHAN RINCIAN</p>
-                        <div className="space-y-2.5">
-                          <label className="flex items-center space-x-3 text-sm font-semibold text-slate-700 cursor-pointer select-none">
-                            <input 
-                              type="checkbox" 
-                              checked={optDibantuSiapkan} 
-                              onChange={(e) => setOptDibantuSiapkan(e.target.checked)}
-                              className="w-4.5 h-4.5 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
-                            />
-                            <span>Include "- DIBANTU SIAPKAN"</span>
-                          </label>
-
-                          <label className="flex items-center space-x-3 text-sm font-semibold text-slate-700 cursor-pointer select-none">
-                            <input 
-                              type="checkbox" 
-                              checked={optKeterangan} 
-                              onChange={(e) => setOptKeterangan(e.target.checked)}
-                              className="w-4.5 h-4.5 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
-                            />
-                            <span>Include Keterangan ({printingCustomer.keterangan || 'DIKIRIM'})</span>
-                          </label>
-
-                          <label className="flex items-center space-x-3 text-sm font-semibold text-slate-700 cursor-pointer select-none">
-                            <input 
-                              type="checkbox" 
-                              checked={optPembayaran} 
-                              onChange={(e) => setOptPembayaran(e.target.checked)}
-                              className="w-4.5 h-4.5 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
-                            />
-                            <span>Include Pembayaran ({printingCustomer.pembayaran || 'TRANSFER'})</span>
-                          </label>
-                        </div>
+                    {/* Quick Config Presets */}
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/60 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Opsi Cepat Penerima</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const defaultLines = generateDefaultPrintLines(printingCustomer, true, true, true);
+                            setPrintLines(defaultLines);
+                            showToast('Rincian berhasil direset!');
+                          }}
+                          className="text-[11px] text-emerald-600 hover:text-emerald-800 font-bold hover:underline"
+                        >
+                          Reset Default
+                        </button>
                       </div>
-
-                      {/* Custom Template Editor */}
-                      <div className="space-y-1.5">
-                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
-                          EDIT TEKS STRUK (KUSTOMISASI BEBAS)
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <label className="flex items-center space-x-2 text-xs font-semibold text-slate-700 cursor-pointer select-none">
+                          <input 
+                            type="checkbox" 
+                            checked={optDibantuSiapkan} 
+                            onChange={(e) => setOptDibantuSiapkan(e.target.checked)}
+                            className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
+                          />
+                          <span>Siapkan</span>
                         </label>
-                        <textarea
-                          rows={6}
-                          value={printText}
-                          onChange={(e) => setPrintText(e.target.value)}
-                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-mono outline-none focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all resize-none text-slate-800"
-                          placeholder="Ketik teks kustom struk di sini..."
-                        />
-                      </div>
 
-                      {/* Width settings */}
-                      <div>
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">UKURAN KERTAS RECEIPT</p>
-                        <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
+                        <label className="flex items-center space-x-2 text-xs font-semibold text-slate-700 cursor-pointer select-none">
+                          <input 
+                            type="checkbox" 
+                            checked={optKeterangan} 
+                            onChange={(e) => setOptKeterangan(e.target.checked)}
+                            className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
+                          />
+                          <span>Keterangan</span>
+                        </label>
+
+                        <label className="flex items-center space-x-2 text-xs font-semibold text-slate-700 cursor-pointer select-none">
+                          <input 
+                            type="checkbox" 
+                            checked={optPembayaran} 
+                            onChange={(e) => setOptPembayaran(e.target.checked)}
+                            className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
+                          />
+                          <span>Pembayaran</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* WORD-STYLE FORMATTING RIBBON */}
+                    <div className="bg-slate-100/90 backdrop-blur-sm border border-slate-200 rounded-2xl p-3 space-y-3 text-slate-700 shadow-sm">
+                      {/* Section 1: Font & Base Size selectors */}
+                      <div className="flex flex-wrap items-center gap-2.5 pb-2.5 border-b border-slate-200">
+                        {/* Font Family Selector */}
+                        <div className="flex items-center space-x-1.5 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+                          <Type className="w-3.5 h-3.5 text-slate-400" />
+                          <select
+                            value={printFontFamily}
+                            onChange={(e) => setPrintFontFamily(e.target.value as any)}
+                            className="bg-transparent text-xs font-bold text-slate-800 outline-none cursor-pointer pr-1"
+                          >
+                            <option value="mono">Courier Mono</option>
+                            <option value="sans">Inter Sans</option>
+                            <option value="serif">Georgia Serif</option>
+                          </select>
+                        </div>
+
+                        {/* Base Size Selector */}
+                        <div className="flex items-center space-x-1.5 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+                          <span className="text-[10px] font-black text-slate-400 font-mono">A</span>
+                          <select
+                            value={printBaseSize}
+                            onChange={(e) => setPrintBaseSize(e.target.value as any)}
+                            className="bg-transparent text-xs font-bold text-slate-800 outline-none cursor-pointer pr-1"
+                          >
+                            <option value="xs">Size XS</option>
+                            <option value="sm">Size SM</option>
+                            <option value="base">Size MD</option>
+                            <option value="lg">Size LG</option>
+                          </select>
+                        </div>
+
+                        {/* Divider */}
+                        <div className="hidden sm:block h-5 w-[1px] bg-slate-300"></div>
+
+                        {/* Paper Width Toggle */}
+                        <div className="flex bg-white rounded-lg p-0.5 border border-slate-200 shadow-sm text-[10px] font-bold">
                           <button
                             type="button"
                             onClick={() => setPrintPaperWidth('58mm')}
-                            className={`py-1.5 px-3 text-xs font-bold rounded-lg transition-all cursor-pointer text-center ${
-                              printPaperWidth === '58mm'
-                                ? 'bg-white text-slate-900 shadow-sm'
-                                : 'text-slate-500 hover:text-slate-900'
+                            className={`px-2.5 py-1 rounded transition-all cursor-pointer ${
+                              printPaperWidth === '58mm' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-800'
                             }`}
                           >
-                            58mm (Standar)
+                            58mm
                           </button>
                           <button
                             type="button"
                             onClick={() => setPrintPaperWidth('80mm')}
-                            className={`py-1.5 px-3 text-xs font-bold rounded-lg transition-all cursor-pointer text-center ${
-                              printPaperWidth === '80mm'
-                                ? 'bg-white text-slate-900 shadow-sm'
-                                : 'text-slate-500 hover:text-slate-900'
+                            className={`px-2.5 py-1 rounded transition-all cursor-pointer ${
+                              printPaperWidth === '80mm' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-800'
                             }`}
                           >
-                            80mm (Lebar)
+                            80mm
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Section 2: Active Line Formatting Controls */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 pt-0.5">
+                        <div className="flex items-center flex-wrap gap-2">
+                          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mr-1">
+                            Gaya Baris {activeLineIndex !== null ? `#${(activeLineIndex + 1).toString().padStart(2, '0')}` : 'Belum Dipilih'} :
+                          </span>
+
+                          {/* Bold Toggle */}
+                          <button
+                            type="button"
+                            disabled={activeLineIndex === null}
+                            onClick={() => {
+                              if (activeLineIndex !== null) {
+                                const newLines = [...printLines];
+                                newLines[activeLineIndex].isBold = !newLines[activeLineIndex].isBold;
+                                setPrintLines(newLines);
+                              }
+                            }}
+                            className={`w-7 h-7 flex items-center justify-center rounded-lg border transition-all cursor-pointer ${
+                              activeLineIndex === null
+                                ? 'opacity-30 cursor-not-allowed bg-slate-100 border-transparent text-slate-400'
+                                : printLines[activeLineIndex]?.isBold
+                                ? 'bg-slate-800 border-slate-800 text-white font-black'
+                                : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
+                            }`}
+                            title="Tebalkan Teks (Bold)"
+                          >
+                            <Bold className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Active Line Size selection group */}
+                          <div className={`flex rounded-lg p-0.5 bg-white border border-slate-200 shadow-sm ${activeLineIndex === null ? 'opacity-35 pointer-events-none' : ''}`}>
+                            {(['sm', 'md', 'lg', 'xl'] as const).map((szOption) => (
+                              <button
+                                key={szOption}
+                                type="button"
+                                onClick={() => {
+                                  if (activeLineIndex !== null) {
+                                    const newLines = [...printLines];
+                                    newLines[activeLineIndex].size = szOption;
+                                    setPrintLines(newLines);
+                                  }
+                                }}
+                                className={`px-2 py-1 text-[10px] font-black rounded transition-all uppercase cursor-pointer ${
+                                  activeLineIndex !== null && printLines[activeLineIndex]?.size === szOption
+                                    ? 'bg-emerald-600 text-white font-bold'
+                                    : 'text-slate-400 hover:text-slate-700'
+                                }`}
+                                title={`Ukuran Teks: ${szOption}`}
+                              >
+                                {szOption}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Active Line Alignment group */}
+                          <div className={`flex rounded-lg p-0.5 bg-white border border-slate-200 shadow-sm ${activeLineIndex === null ? 'opacity-35 pointer-events-none' : ''}`}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (activeLineIndex !== null) {
+                                  const newLines = [...printLines];
+                                  newLines[activeLineIndex].align = 'left';
+                                  setPrintLines(newLines);
+                                }
+                              }}
+                              className={`p-1 rounded transition-all cursor-pointer ${
+                                activeLineIndex !== null && printLines[activeLineIndex]?.align === 'left'
+                                  ? 'bg-slate-800 text-white'
+                                  : 'text-slate-400 hover:text-slate-700'
+                              }`}
+                              title="Rata Kiri"
+                            >
+                              <AlignLeft className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (activeLineIndex !== null) {
+                                  const newLines = [...printLines];
+                                  newLines[activeLineIndex].align = 'center';
+                                  setPrintLines(newLines);
+                                }
+                              }}
+                              className={`p-1 rounded transition-all cursor-pointer ${
+                                activeLineIndex !== null && printLines[activeLineIndex]?.align === 'center'
+                                  ? 'bg-slate-800 text-white'
+                                  : 'text-slate-400 hover:text-slate-700'
+                              }`}
+                              title="Rata Tengah"
+                            >
+                              <AlignCenter className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (activeLineIndex !== null) {
+                                  const newLines = [...printLines];
+                                  newLines[activeLineIndex].align = 'right';
+                                  setPrintLines(newLines);
+                                }
+                              }}
+                              className={`p-1 rounded transition-all cursor-pointer ${
+                                activeLineIndex !== null && printLines[activeLineIndex]?.align === 'right'
+                                  ? 'bg-slate-800 text-white'
+                                  : 'text-slate-400 hover:text-slate-700'
+                              }`}
+                              title="Rata Kanan"
+                            >
+                              <AlignRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Re-order & delete controls in Ribbon */}
+                        <div className="flex items-center space-x-1">
+                          {/* Move active line up */}
+                          <button
+                            type="button"
+                            disabled={activeLineIndex === null || activeLineIndex === 0}
+                            onClick={() => {
+                              if (activeLineIndex !== null && activeLineIndex > 0) {
+                                const newLines = [...printLines];
+                                const temp = newLines[activeLineIndex];
+                                newLines[activeLineIndex] = newLines[activeLineIndex - 1];
+                                newLines[activeLineIndex - 1] = temp;
+                                setPrintLines(newLines);
+                                setActiveLineIndex(activeLineIndex - 1);
+                              }
+                            }}
+                            className="w-7 h-7 flex items-center justify-center bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg disabled:opacity-30 disabled:hover:bg-white transition-all cursor-pointer shadow-sm"
+                            title="Naikkan Baris"
+                          >
+                            <ChevronUp className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Move active line down */}
+                          <button
+                            type="button"
+                            disabled={activeLineIndex === null || activeLineIndex === printLines.length - 1}
+                            onClick={() => {
+                              if (activeLineIndex !== null && activeLineIndex < printLines.length - 1) {
+                                const newLines = [...printLines];
+                                const temp = newLines[activeLineIndex];
+                                newLines[activeLineIndex] = newLines[activeLineIndex + 1];
+                                newLines[activeLineIndex + 1] = temp;
+                                setPrintLines(newLines);
+                                setActiveLineIndex(activeLineIndex + 1);
+                              }
+                            }}
+                            className="w-7 h-7 flex items-center justify-center bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg disabled:opacity-30 disabled:hover:bg-white transition-all cursor-pointer shadow-sm"
+                            title="Turunkan Baris"
+                          >
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Delete active line */}
+                          <button
+                            type="button"
+                            disabled={activeLineIndex === null}
+                            onClick={() => {
+                              if (activeLineIndex !== null) {
+                                handleDeleteLine(activeLineIndex);
+                              }
+                            }}
+                            className="w-7 h-7 flex items-center justify-center bg-white border border-red-200 hover:bg-red-50 text-red-500 rounded-lg disabled:opacity-30 disabled:hover:bg-white transition-all cursor-pointer shadow-sm"
+                            title="Hapus Baris"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* INTERACTIVE DOCUMENT SHEET (NOTES / FREE-FLOW STYLE) */}
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                          LEMBAR CATATAN STRUK (NOTES VIEW)
+                        </label>
+                        <span className="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full">
+                          Ketik Bebas • Enter = Baris Baru • Arrow Up/Down
+                        </span>
+                      </div>
+
+                      {/* Luxurious warm cream notebook paper layout */}
+                      <div className="bg-[#FCFBF8] border border-slate-300 rounded-2xl shadow-md p-6 min-h-[300px] flex flex-col justify-between max-h-[380px] overflow-y-auto relative ring-1 ring-black/5">
+                        
+                        {/* Red margin binder line (mimics real notebook paper) */}
+                        <div className="absolute left-[44px] top-0 bottom-0 w-[1px] bg-red-200/65 select-none pointer-events-none"></div>
+
+                        <div className="space-y-1 flex-1 relative z-10">
+                          {printLines.map((line, idx) => {
+                            const isActive = activeLineIndex === idx;
+                            return (
+                              <div 
+                                key={idx}
+                                onClick={() => setActiveLineIndex(idx)}
+                                className={`group flex items-center space-x-4 py-1.5 px-1 transition-all rounded-lg ${
+                                  isActive 
+                                    ? 'bg-amber-100/35 shadow-sm' 
+                                    : 'hover:bg-slate-100/25'
+                                }`}
+                              >
+                                {/* Minimalist Page Margin Line Number / Indicator */}
+                                <span className={`text-[10px] font-mono select-none w-6 text-right font-semibold tracking-tighter ${
+                                  isActive ? 'text-emerald-600 font-bold scale-110' : 'text-slate-300'
+                                }`}>
+                                  {(idx + 1).toString().padStart(2, '0')}
+                                </span>
+
+                                {/* Editable Input Field flowing like simple document lines */}
+                                <input
+                                  type="text"
+                                  value={line.text}
+                                  onChange={(e) => {
+                                    const newLines = [...printLines];
+                                    newLines[idx].text = e.target.value;
+                                    setPrintLines(newLines);
+                                  }}
+                                  onFocus={() => setActiveLineIndex(idx)}
+                                  onKeyDown={(e) => handleLineKeyDown(e, idx)}
+                                  style={{
+                                    fontWeight: line.isBold ? 'bold' : 'normal',
+                                    textAlign: line.align,
+                                    fontSize: line.size === 'sm' ? '13px' : line.size === 'md' ? '15px' : line.size === 'lg' ? '18px' : '21px',
+                                    fontFamily: printFontFamily === 'mono' ? 'Courier New, Courier, monospace' : printFontFamily === 'sans' ? 'Inter, sans-serif' : 'Georgia, serif',
+                                  }}
+                                  className="flex-1 bg-transparent border-none outline-none text-slate-800 p-0 transition-all placeholder:font-normal placeholder:italic placeholder:text-slate-300"
+                                  placeholder="Mulai menulis baris struk di sini..."
+                                  id={`line-input-${idx}`}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Add line helper button at bottom of notebook */}
+                        <div className="pt-4 border-t border-dashed border-slate-200/80 mt-6 relative z-10">
+                          <button
+                            type="button"
+                            onClick={() => handleAddLine(printLines.length - 1)}
+                            className="w-full py-2 bg-white/75 hover:bg-emerald-50 text-slate-500 hover:text-emerald-700 border border-slate-200 hover:border-emerald-300 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center justify-center space-x-1.5 shadow-sm hover:shadow"
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span>Tambah Baris Catatan</span>
                           </button>
                         </div>
                       </div>
@@ -1911,7 +2388,8 @@ function doPost(e) {
                       <button
                         onClick={async () => {
                           try {
-                            await navigator.clipboard.writeText(printText);
+                            const formattedPlain = printLines.map(l => l.text).join('\n');
+                            await navigator.clipboard.writeText(formattedPlain);
                             showToast('Teks struk berhasil disalin!');
                           } catch (err) {
                             showToast('Gagal menyalin teks.');
@@ -1934,7 +2412,7 @@ function doPost(e) {
                     </div>
                     <button
                       onClick={() => setShowPrintModal(false)}
-                      className="w-full py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                      className="w-full py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-all cursor-pointer text-center"
                     >
                       Tutup
                     </button>
@@ -1942,37 +2420,51 @@ function doPost(e) {
                 </div>
 
                 {/* Right Column: Live Struk Preview (The "Paper" view) */}
-                <div className="w-full md:w-[260px] bg-slate-50 p-6 flex flex-col items-center justify-center border-t md:border-t-0 md:border-l border-slate-100 relative">
-                  <div className="absolute top-4 right-4 hidden md:block">
-                    <button 
-                      onClick={() => setShowPrintModal(false)}
-                      className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">LIVE PREVIEW</p>
+                <div className="w-full md:w-[320px] bg-slate-50/70 p-6 flex flex-col items-center justify-start border-t md:border-t-0 md:border-l border-slate-100 relative max-h-[90vh] overflow-y-auto">
+                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">TAMPILAN LIVE PREVIEW</p>
                   
                   {/* The Thermal Paper Receipt UI Container */}
-                  <div className="w-full bg-white shadow-md border border-slate-200 p-4 rounded-b-md relative overflow-hidden flex flex-col justify-between min-h-[280px]">
+                  <div className="w-full bg-white shadow-xl border border-slate-200/80 p-5 rounded-b-md relative overflow-hidden flex flex-col justify-between min-h-[360px] max-w-[280px]">
                     {/* Top jagged paper line decoration */}
-                    <div className="absolute top-0 left-0 right-0 h-1 flex justify-between">
-                      {Array.from({ length: 24 }).map((_, i) => (
-                        <div key={i} className="w-2 h-2 bg-slate-50 rotate-45 transform -translate-y-1" />
+                    <div className="absolute top-0 left-0 right-0 h-1.5 flex justify-between">
+                      {Array.from({ length: 28 }).map((_, i) => (
+                        <div key={i} className="w-2.5 h-2.5 bg-slate-50 rotate-45 transform -translate-y-1.5 border-t border-l border-slate-200/30" />
                       ))}
                     </div>
 
-                    <div className="mt-2 flex-1">
-                      {/* Monospace receipt preview matching the exact fonts */}
-                      <pre className="text-[11px] font-mono font-medium text-slate-800 leading-relaxed whitespace-pre-wrap select-text break-words">
-                        {printText}
-                      </pre>
+                    {/* Styled Receipt Paper Content */}
+                    <div 
+                      className="mt-3 flex-1"
+                      style={{
+                        fontFamily: printFontFamily === 'mono' ? 'Courier New, Courier, monospace' : printFontFamily === 'sans' ? 'Inter, sans-serif' : 'Georgia, serif',
+                        fontSize: printBaseSize === 'xs' ? '11px' : printBaseSize === 'sm' ? '13px' : printBaseSize === 'base' ? '15px' : '17px',
+                        lineHeight: '1.4'
+                      }}
+                    >
+                      {printLines.map((line, idx) => (
+                        <div 
+                          key={idx} 
+                          style={{
+                            fontWeight: line.isBold ? 'bold' : 'normal',
+                            fontSize: line.size === 'sm' ? '0.85em' : line.size === 'md' ? '1.1em' : line.size === 'lg' ? '1.3em' : '1.5em',
+                            textAlign: line.align,
+                            marginBottom: '4px',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                            lineHeight: '1.3'
+                          }}
+                          className="text-slate-900"
+                        >
+                          {line.text}
+                        </div>
+                      ))}
                     </div>
 
                     {/* Bottom dashed border */}
-                    <div className="border-t border-dashed border-slate-300 mt-4 pt-2 text-center">
-                      <p className="text-[8px] font-mono text-slate-400 uppercase tracking-widest">Thermal Receipt Mode</p>
+                    <div className="border-t border-dashed border-slate-200 mt-6 pt-3 text-center">
+                      <p className="text-[8px] font-mono text-slate-400 uppercase tracking-widest">
+                        {printPaperWidth} Thermal Printer Mode
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -1990,7 +2482,31 @@ function doPost(e) {
           width: printPaperWidth === '58mm' ? '58mm' : '80mm',
         }}
       >
-        {printText}
+        <div style={{
+          fontFamily: printFontFamily === 'mono' ? 'Courier New, Courier, monospace' : printFontFamily === 'sans' ? 'Inter, sans-serif' : 'Georgia, serif',
+          fontSize: printBaseSize === 'xs' ? '11px' : printBaseSize === 'sm' ? '13px' : printBaseSize === 'base' ? '15px' : '17px',
+          lineHeight: '1.4',
+          color: '#000',
+          backgroundColor: '#fff',
+          padding: '4mm'
+        }}>
+          {printLines.map((line, idx) => (
+            <div 
+              key={idx} 
+              style={{
+                fontWeight: line.isBold ? 'bold' : 'normal',
+                fontSize: line.size === 'sm' ? '0.85em' : line.size === 'md' ? '1.1em' : line.size === 'lg' ? '1.3em' : '1.5em',
+                textAlign: line.align,
+                marginBottom: '4px',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                lineHeight: '1.3'
+              }}
+            >
+              {line.text}
+            </div>
+          ))}
+        </div>
       </div>
 
     </div>
