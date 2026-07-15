@@ -1105,16 +1105,18 @@ export default function App() {
 
                         return (
                           <tr key={customer.id} className="group hover:bg-slate-50/50 transition-colors">
-                            <td className="py-4 pr-3 whitespace-nowrap">
-                              <div className="flex items-center space-x-2 text-sm">
-                                <span className="font-bold text-slate-900">{customer.name}</span>
+                            <td className="py-4 pr-3">
+                              <div className="flex flex-col space-y-1 text-sm">
+                                <span className="font-bold text-slate-900 break-words">{customer.name}</span>
                                 {customer.phone ? (
-                                  <a 
-                                    href={`tel:${customer.phone}`}
-                                    className="inline-flex items-center text-xs text-blue-600 hover:text-blue-800 font-bold hover:underline bg-blue-50/70 px-2 py-0.5 rounded-full font-mono"
-                                  >
-                                    {customer.phone}
-                                  </a>
+                                  <div>
+                                    <a 
+                                      href={`tel:${customer.phone}`}
+                                      className="inline-flex items-center text-xs text-blue-600 hover:text-blue-800 font-bold hover:underline bg-blue-50/70 px-2 py-0.5 rounded-full font-mono"
+                                    >
+                                      {customer.phone}
+                                    </a>
+                                  </div>
                                 ) : (
                                   <span className="text-xs text-slate-300 italic">-</span>
                                 )}
