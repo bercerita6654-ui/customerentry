@@ -174,6 +174,33 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Helper to handle Google Auth credential expiration or errors
+  const checkAndHandleAuthError = async (err: any) => {
+    const errorMsg = String(err?.message || err || '').toLowerCase();
+    if (
+      errorMsg.includes('invalid authentication credentials') ||
+      errorMsg.includes('expected oauth 2 access token') ||
+      errorMsg.includes('unauthorized') ||
+      errorMsg.includes('401') ||
+      errorMsg.includes('invalid credentials') ||
+      errorMsg.includes('auth') ||
+      errorMsg.includes('token')
+    ) {
+      console.warn('Authentication error detected, logging out and clearing stale token:', errorMsg);
+      try {
+        await logout();
+      } catch (logoutErr) {
+        console.error('Error during automatic logout:', logoutErr);
+      }
+      setAccessToken(null);
+      setCurrentUser(null);
+      setNeedsAuth(true);
+      setError('Sesi Google Anda telah berakhir atau tidak valid. Silakan klik tombol "Masuk dengan Google" kembali untuk memperbarui akses.');
+      return true;
+    }
+    return false;
+  };
+
   // 2. Fetch customers data when auth token or config changes
   const loadData = async (forceAuthToken: string | null = accessToken) => {
     setLoading(true);
@@ -215,13 +242,16 @@ export default function App() {
           setCustomers(data);
         } catch (apiErr: any) {
           console.error('Failed reading live Sheets API, falling back to public CSV', apiErr);
-          // Fallback to public CSV if Sheet ID matches the default one
-          if (spreadsheetId === DEFAULT_SPREADSHEET_ID) {
-            const data = await fetchCustomersFromPublicCSV(DEFAULT_CSV_URL);
-            setCustomers(data);
-            setError('Menggunakan data cache publik. Login kembali atau pastikan hak akses jika ingin mengedit.');
-          } else {
-            throw apiErr;
+          const isAuthError = await checkAndHandleAuthError(apiErr);
+          if (!isAuthError) {
+            // Fallback to public CSV if Sheet ID matches the default one
+            if (spreadsheetId === DEFAULT_SPREADSHEET_ID) {
+              const data = await fetchCustomersFromPublicCSV(DEFAULT_CSV_URL);
+              setCustomers(data);
+              setError('Menggunakan data cache publik. Login kembali atau pastikan hak akses jika ingin mengedit.');
+            } else {
+              throw apiErr;
+            }
           }
         }
       } else {
@@ -237,7 +267,10 @@ export default function App() {
       }
     } catch (err: any) {
       console.error('Error fetching data:', err);
-      setError(err.message || 'Gagal mengambil data dari Google Sheets. Pastikan Spreadsheet ID benar dan telah dibagikan.');
+      const isAuthError = await checkAndHandleAuthError(err);
+      if (!isAuthError) {
+        setError(err.message || 'Gagal mengambil data dari Google Sheets. Pastikan Spreadsheet ID benar dan telah dibagikan.');
+      }
     } finally {
       setLoading(false);
     }
@@ -609,7 +642,10 @@ export default function App() {
       }
     } catch (err: any) {
       console.error('Submit error:', err);
-      setError('Gagal menyimpan data: ' + (err.message || err));
+      const isAuthError = await checkAndHandleAuthError(err);
+      if (!isAuthError) {
+        setError('Gagal menyimpan data: ' + (err.message || err));
+      }
     } finally {
       setSaving(false);
     }
@@ -681,7 +717,10 @@ export default function App() {
         await loadData();
       } catch (err: any) {
         console.error('Delete error:', err);
-        setError('Gagal menghapus data: ' + (err.message || err));
+        const isAuthError = await checkAndHandleAuthError(err);
+        if (!isAuthError) {
+          setError('Gagal menghapus data: ' + (err.message || err));
+        }
       } finally {
         setLoading(false);
       }
