@@ -47,6 +47,24 @@ export function parseCSV(csvText: string): string[][] {
   return lines;
 }
 
+// Helper to extract detailed error message from Google Sheets API responses
+async function parseGoogleApiError(response: Response, defaultMessage: string): Promise<string> {
+  try {
+    const text = await response.clone().text();
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed?.error?.message) {
+        return parsed.error.message;
+      }
+    } catch {
+      // Ignore JSON parse error
+    }
+    return text || response.statusText || defaultMessage;
+  } catch (e) {
+    return response.statusText || defaultMessage;
+  }
+}
+
 export interface SheetMetadata {
   sheetId: number;
   title: string;
@@ -62,9 +80,9 @@ export async function fetchSpreadsheetMetadata(
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!response.ok) {
-    const errorDetails = await response.text();
-    console.error('Spreadsheet metadata error details:', errorDetails);
-    throw new Error(`Gagal memuat metadata spreadsheet: ${response.statusText}`);
+    const errorMessage = await parseGoogleApiError(response, response.statusText);
+    console.error('Spreadsheet metadata error details:', errorMessage);
+    throw new Error(`Gagal memuat metadata spreadsheet: ${errorMessage}`);
   }
   const data = await response.json();
   if (!data.sheets || data.sheets.length === 0) {
@@ -118,9 +136,9 @@ export async function fetchCustomersFromSheetsAPI(
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!response.ok) {
-    const errorDetails = await response.text();
-    console.error('Sheets API read error details:', errorDetails);
-    throw new Error(`Gagal membaca spreadsheet: ${response.statusText}`);
+    const errorMessage = await parseGoogleApiError(response, response.statusText);
+    console.error('Sheets API read error details:', errorMessage);
+    throw new Error(`Gagal membaca spreadsheet: ${errorMessage}`);
   }
   const data = await response.json();
   const rows = data.values || [];
@@ -173,9 +191,9 @@ export async function addCustomer(
   });
 
   if (!response.ok) {
-    const errorDetails = await response.text();
-    console.error('Sheets API append error details:', errorDetails);
-    throw new Error(`Gagal menambahkan data: ${response.statusText}`);
+    const errorMessage = await parseGoogleApiError(response, response.statusText);
+    console.error('Sheets API append error details:', errorMessage);
+    throw new Error(`Gagal menambahkan data: ${errorMessage}`);
   }
 }
 
@@ -210,9 +228,9 @@ export async function updateCustomer(
   });
 
   if (!response.ok) {
-    const errorDetails = await response.text();
-    console.error('Sheets API update error details:', errorDetails);
-    throw new Error(`Gagal memperbarui data baris ${customer.id}: ${response.statusText}`);
+    const errorMessage = await parseGoogleApiError(response, response.statusText);
+    console.error('Sheets API update error details:', errorMessage);
+    throw new Error(`Gagal memperbarui data baris ${customer.id}: ${errorMessage}`);
   }
 }
 
@@ -247,9 +265,9 @@ export async function deleteCustomerRow(
   });
 
   if (!response.ok) {
-    const errorDetails = await response.text();
-    console.error('Sheets API batchUpdate delete error details:', errorDetails);
-    throw new Error(`Gagal menghapus data baris ${rowId}: ${response.statusText}`);
+    const errorMessage = await parseGoogleApiError(response, response.statusText);
+    console.error('Sheets API batchUpdate delete error details:', errorMessage);
+    throw new Error(`Gagal menghapus data baris ${rowId}: ${errorMessage}`);
   }
 }
 
