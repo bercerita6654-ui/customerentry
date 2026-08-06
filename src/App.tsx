@@ -1310,7 +1310,12 @@ export default function App() {
               
               {/* Header Title section matching 'Live Sheet Data' of design HTML */}
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest">Live Sheet Data</h3>
+                <div className="flex items-center space-x-2">
+                  <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest">Live Sheet Data</h3>
+                  <span className="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full font-bold">
+                    Utuh ({filteredCustomers.length} data)
+                  </span>
+                </div>
                 <span className="text-[10px] bg-slate-100 text-slate-500 px-2.5 py-0.5 rounded-full font-semibold">
                   Last synced 2m ago
                 </span>
@@ -1363,7 +1368,7 @@ export default function App() {
               </div>
 
               {/* Data Table */}
-              <div className="overflow-x-auto">
+              <div className="max-h-[600px] overflow-y-auto overflow-x-auto pr-2">
                 {loading ? (
                   <div className="py-20 text-center space-y-3">
                     <RefreshCw className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
