@@ -890,7 +890,7 @@ export default function App() {
 
       {/* Global Navigation Header - Sleek Design */}
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-100" id="header-nav">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="max-w-[1500px] mx-auto px-6 py-4">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             {/* Logo & Meta */}
             <div className="flex items-center space-x-3.5">
@@ -1003,7 +1003,7 @@ export default function App() {
       </header>
 
       {/* Sub-header section exact to design theme layout */}
-      <div className="max-w-7xl w-full mx-auto px-6 pt-8 pb-4">
+      <div className="max-w-[1500px] w-full mx-auto px-6 pt-8 pb-4">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
           <div>
             <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Customer Data Entry</h1>
@@ -1031,7 +1031,7 @@ export default function App() {
       </div>
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-4 space-y-6" id="main-content">
+      <main className="flex-1 max-w-[1500px] w-full mx-auto px-6 py-4 space-y-6" id="main-content">
         
         {/* Error / Warning Alert Panel */}
         {error && (
@@ -1089,7 +1089,7 @@ export default function App() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
           {/* LEFT COLUMN: Data Entry Form */}
-          <section className="lg:col-span-5 space-y-6" id="form-section">
+          <section className="lg:col-span-4 space-y-6" id="form-section">
             <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
               
               {/* Form header title exact to design HTML */}
@@ -1305,7 +1305,7 @@ export default function App() {
           </section>
 
           {/* RIGHT COLUMN: Interactive Customer Table & Filter System */}
-          <section className="lg:col-span-7 space-y-6" id="table-section">
+          <section className="lg:col-span-8 space-y-6" id="table-section">
             <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 flex flex-col">
               
               {/* Header Title section matching 'Live Sheet Data' of design HTML */}
@@ -1526,7 +1526,7 @@ export default function App() {
 
       {/* FOOTER */}
       <footer className="bg-slate-900 text-slate-400 border-t border-slate-800 py-8 mt-16" id="global-footer">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="max-w-[1500px] mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-xs">
             © 2026 SyncRecap Pro. Fully integrated with Google Sheets API in real-time.
           </p>
