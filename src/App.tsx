@@ -1368,7 +1368,7 @@ export default function App() {
               </div>
 
               {/* Data Table */}
-              <div className="max-h-[600px] overflow-y-auto overflow-x-hidden pr-2">
+              <div className="max-h-[600px] overflow-y-auto overflow-x-visible pr-2">
                 {loading ? (
                   <div className="py-20 text-center space-y-3">
                     <RefreshCw className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
