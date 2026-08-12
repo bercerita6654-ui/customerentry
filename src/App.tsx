@@ -38,7 +38,10 @@ import {
   ChevronUp,
   ChevronDown,
   RotateCcw,
-  FileText
+  FileText,
+  Building2,
+  CreditCard,
+  Landmark
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, initAuth, googleSignIn, logout, getAccessToken } from './firebase';
@@ -122,6 +125,8 @@ export default function App() {
   const [optDibantuSiapkan, setOptDibantuSiapkan] = useState(true);
   const [optKeterangan, setOptKeterangan] = useState(true);
   const [optPembayaran, setOptPembayaran] = useState(true);
+  const [optRekening, setOptRekening] = useState(false);
+  const [copiedBank, setCopiedBank] = useState(false);
   const [printLines, setPrintLines] = useState<PrintLine[]>([]);
   const [printFontFamily, setPrintFontFamily] = useState<'mono' | 'sans' | 'serif'>('sans');
   const [printBaseSize, setPrintBaseSize] = useState<'xs' | 'sm' | 'base' | 'lg'>('sm');
@@ -281,7 +286,7 @@ export default function App() {
   }, [spreadsheetId, sheetName, accessToken, connectionMode, appsScriptUrl]);
 
   // Function to build default print lines from customer & option states
-  const generateDefaultPrintLines = (customer: Customer, showSiapkan: boolean, showKet: boolean, showPem: boolean): PrintLine[] => {
+  const generateDefaultPrintLines = (customer: Customer, showSiapkan: boolean, showKet: boolean, showPem: boolean, showRek: boolean = false): PrintLine[] => {
     const lines: PrintLine[] = [];
     
     // 1. Name & Phone
@@ -335,6 +340,16 @@ export default function App() {
         align: 'left'
       });
     }
+
+    // 6. Rekening Perusahaan
+    if (showRek) {
+      lines.push({
+        text: '- BCA: 7445087998 (CV. GLOBAL JAYA SEJAHTERA)',
+        isBold: false,
+        size: 'sm',
+        align: 'left'
+      });
+    }
     
     return lines;
   };
@@ -346,11 +361,12 @@ export default function App() {
         printingCustomer, 
         optDibantuSiapkan, 
         optKeterangan, 
-        optPembayaran
+        optPembayaran,
+        optRekening
       );
       setPrintLines(defaultLines);
     }
-  }, [printingCustomer, optDibantuSiapkan, optKeterangan, optPembayaran]);
+  }, [printingCustomer, optDibantuSiapkan, optKeterangan, optPembayaran, optRekening]);
 
   // Effect to dynamically update Thermal Print text template (for copy/paste or text editor)
   useEffect(() => {
@@ -539,6 +555,14 @@ export default function App() {
     setTimeout(() => {
       setSuccessMessage(null);
     }, 4000);
+  };
+
+  const handleCopyBankAccount = () => {
+    const bankText = `Bank BCA\n7445087998\na/n CV. GLOBAL JAYA SEJAHTERA`;
+    navigator.clipboard.writeText(bankText);
+    setCopiedBank(true);
+    showToast('Info Rekening BCA berhasil disalin!');
+    setTimeout(() => setCopiedBank(false), 2000);
   };
 
   // Phone number sanitizer to replace +62/62 with 0
@@ -1009,7 +1033,29 @@ export default function App() {
             <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Customer Data Entry</h1>
             <p className="text-slate-500 text-sm mt-1">Real-time synchronization with Google Sheets backend</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Rekening Perusahaan Chip */}
+            <div className="bg-emerald-50 border border-emerald-200/80 px-3.5 py-2 rounded-2xl flex items-center space-x-2.5 text-xs shadow-sm">
+              <div className="bg-emerald-600 text-white p-1.5 rounded-xl flex-shrink-0">
+                <Building2 className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center space-x-1.5">
+                  <span className="font-bold text-emerald-950">BCA:</span>
+                  <span className="font-mono font-bold text-emerald-700">7445087998</span>
+                </div>
+                <span className="text-[10px] text-emerald-800 font-semibold block">CV. GLOBAL JAYA SEJAHTERA</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyBankAccount}
+                title="Salin Nomor Rekening"
+                className="ml-1 bg-white hover:bg-emerald-100 text-emerald-700 p-1.5 rounded-xl border border-emerald-200 transition-all cursor-pointer active:scale-95 shadow-xs"
+              >
+                {copiedBank ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+
             <button 
               onClick={handleExportLocalCSV}
               disabled={customers.length === 0}
@@ -1247,6 +1293,27 @@ export default function App() {
                       </button>
                     ))}
                   </div>
+
+                  {/* Quick Copy Rekening Box */}
+                  <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-2xl p-3 flex items-center justify-between mt-2.5">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="bg-emerald-600 text-white p-1.5 rounded-xl flex-shrink-0">
+                        <Landmark className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-bold text-emerald-950">BCA 7445087998</p>
+                        <p className="text-[10px] text-emerald-700 font-semibold">CV. GLOBAL JAYA SEJAHTERA</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCopyBankAccount}
+                      className="bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-2.5 py-1.5 rounded-xl text-[10px] font-bold transition-all shadow-xs flex items-center space-x-1 cursor-pointer active:scale-95"
+                    >
+                      {copiedBank ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-emerald-600" />}
+                      <span>{copiedBank ? 'Tersalin' : 'Salin'}</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Submit Actions */}
@@ -1265,6 +1332,45 @@ export default function App() {
                   )}
                 </button>
               </form>
+            </div>
+
+            {/* Company Bank Account Card */}
+            <div className="bg-gradient-to-br from-emerald-950 via-slate-900 to-slate-900 text-white rounded-3xl p-6 shadow-xl relative overflow-hidden border border-emerald-800/30">
+              <div className="absolute -right-6 -bottom-6 opacity-10 text-white pointer-events-none">
+                <Building2 className="w-36 h-36" />
+              </div>
+              <div className="relative z-10 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2.5">
+                    <div className="bg-emerald-500/20 border border-emerald-400/30 p-2 rounded-2xl text-emerald-300">
+                      <Building2 className="w-4.5 h-4.5" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-widest block">Rekening Perusahaan</span>
+                      <span className="text-xs font-semibold text-slate-300">CV. GLOBAL JAYA SEJAHTERA</span>
+                    </div>
+                  </div>
+                  <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-bold px-2.5 py-1 rounded-full">
+                    BCA
+                  </span>
+                </div>
+
+                <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] text-emerald-200 font-bold uppercase tracking-wider">Bank BCA</p>
+                    <p className="text-xl font-mono font-bold text-white tracking-widest my-0.5">7445087998</p>
+                    <p className="text-[11px] font-semibold text-slate-300">a/n CV. GLOBAL JAYA SEJAHTERA</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCopyBankAccount}
+                    className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-3.5 py-2.5 rounded-xl text-xs transition-all shadow-lg flex items-center space-x-1.5 cursor-pointer active:scale-95"
+                  >
+                    {copiedBank ? <Check className="w-4 h-4 text-slate-950" /> : <Copy className="w-4 h-4 text-slate-950" />}
+                    <span>{copiedBank ? 'Tersalin!' : 'Salin'}</span>
+                  </button>
+                </div>
+              </div>
             </div>
             
             {/* Cloud Status Panel - Matches the premium Dark Sidebar widget exactly */}
@@ -2073,7 +2179,11 @@ function doPost(e) {
                         <button
                           type="button"
                           onClick={() => {
-                            const defaultLines = generateDefaultPrintLines(printingCustomer, true, true, true);
+                            setOptDibantuSiapkan(true);
+                            setOptKeterangan(true);
+                            setOptPembayaran(true);
+                            setOptRekening(false);
+                            const defaultLines = generateDefaultPrintLines(printingCustomer, true, true, true, false);
                             setPrintLines(defaultLines);
                             showToast('Rincian berhasil direset!');
                           }}
@@ -2082,7 +2192,7 @@ function doPost(e) {
                           Reset Default
                         </button>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                         <label className="flex items-center space-x-2 text-xs font-semibold text-slate-700 cursor-pointer select-none">
                           <input 
                             type="checkbox" 
@@ -2111,6 +2221,16 @@ function doPost(e) {
                             className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
                           />
                           <span>Pembayaran</span>
+                        </label>
+
+                        <label className="flex items-center space-x-2 text-xs font-semibold text-slate-700 cursor-pointer select-none">
+                          <input 
+                            type="checkbox" 
+                            checked={optRekening} 
+                            onChange={(e) => setOptRekening(e.target.checked)}
+                            className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
+                          />
+                          <span>Rekening BCA</span>
                         </label>
                       </div>
                     </div>
