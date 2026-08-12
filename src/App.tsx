@@ -557,9 +557,27 @@ export default function App() {
     }, 4000);
   };
 
-  const handleCopyBankAccount = () => {
-    const bankText = `Bank BCA\n7445087998\na/n CV. GLOBAL JAYA SEJAHTERA`;
-    navigator.clipboard.writeText(bankText);
+  const handleCopyBankAccount = async () => {
+    const plainText = `No Rekening :\nBank BCA\n*7445087998*\na/n *CV. GLOBAL JAYA SEJAHTERA*`;
+    const htmlText = `No Rekening :<br>Bank BCA<br><b>7445087998</b><br>a/n <b>CV. GLOBAL JAYA SEJAHTERA</b>`;
+
+    try {
+      if (typeof ClipboardItem !== 'undefined' && navigator.clipboard && navigator.clipboard.write) {
+        const textBlob = new Blob([plainText], { type: 'text/plain' });
+        const htmlBlob = new Blob([htmlText], { type: 'text/html' });
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/plain': textBlob,
+            'text/html': htmlBlob,
+          }),
+        ]);
+      } else {
+        await navigator.clipboard.writeText(plainText);
+      }
+    } catch {
+      await navigator.clipboard.writeText(plainText);
+    }
+
     setCopiedBank(true);
     showToast('Info Rekening BCA berhasil disalin!');
     setTimeout(() => setCopiedBank(false), 2000);
