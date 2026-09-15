@@ -81,7 +81,11 @@ export async function fetchSpreadsheetMetadata(
   });
   if (!response.ok) {
     const errorMessage = await parseGoogleApiError(response, response.statusText);
-    console.error('Spreadsheet metadata error details:', errorMessage);
+    if (response.status === 401 || errorMessage.toLowerCase().includes('authentication') || errorMessage.toLowerCase().includes('credential')) {
+      console.warn('Spreadsheet metadata auth expired or invalid:', errorMessage);
+    } else {
+      console.error('Spreadsheet metadata error details:', errorMessage);
+    }
     throw new Error(`Gagal memuat metadata spreadsheet: ${errorMessage}`);
   }
   const data = await response.json();
@@ -137,7 +141,11 @@ export async function fetchCustomersFromSheetsAPI(
   });
   if (!response.ok) {
     const errorMessage = await parseGoogleApiError(response, response.statusText);
-    console.error('Sheets API read error details:', errorMessage);
+    if (response.status === 401 || errorMessage.toLowerCase().includes('authentication') || errorMessage.toLowerCase().includes('credential')) {
+      console.warn('Sheets API auth expired or invalid:', errorMessage);
+    } else {
+      console.error('Sheets API read error details:', errorMessage);
+    }
     throw new Error(`Gagal membaca spreadsheet: ${errorMessage}`);
   }
   const data = await response.json();

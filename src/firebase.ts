@@ -9,10 +9,46 @@ const provider = new GoogleAuthProvider();
 // Request Google Sheets scopes
 provider.addScope('https://www.googleapis.com/auth/spreadsheets');
 
+// Helper to get and validate stored access token
+export const getStoredAccessToken = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const token = localStorage.getItem('google_access_token');
+    const expiresAtStr = localStorage.getItem('google_access_token_expires_at');
+    if (!token) return null;
+
+    // If expiresAt is missing (from older sessions) or passed, treat as expired
+    if (!expiresAtStr) {
+      clearAuthToken();
+      return null;
+    }
+    const expiresAt = parseInt(expiresAtStr, 10);
+    if (isNaN(expiresAt) || Date.now() >= expiresAt) {
+      clearAuthToken();
+      return null;
+    }
+    return token;
+  } catch {
+    return null;
+  }
+};
+
+export const clearAuthToken = () => {
+  cachedAccessToken = null;
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem('google_access_token');
+      localStorage.removeItem('google_access_token_expires_at');
+    } catch {
+      // ignore
+    }
+  }
+};
+
 // Flag to indicate if we are in the middle of a sign-in flow.
 let isSigningIn = false;
 // Cache the access token in memory and local storage.
-let cachedAccessToken: string | null = typeof window !== 'undefined' ? localStorage.getItem('google_access_token') : null;
+let cachedAccessToken: string | null = getStoredAccessToken();
 
 // Initialize auth state listener.
 export const initAuth = (
@@ -21,18 +57,17 @@ export const initAuth = (
 ) => {
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
-      if (cachedAccessToken) {
-        if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
-      } else if (!isSigningIn) {
-        // If user is logged in but token is not in cache, we need to sign in again or re-auth
-        // For a seamless UX, we try to see if we can refresh or prompt
+      const validToken = getStoredAccessToken();
+      if (validToken) {
+        cachedAccessToken = validToken;
+        if (onAuthSuccess) onAuthSuccess(user, validToken);
+      } else {
+        // User session exists in Firebase, but Google OAuth access token has expired
+        cachedAccessToken = null;
         if (onAuthFailure) onAuthFailure();
       }
     } else {
-      cachedAccessToken = null;
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('google_access_token');
-      }
+      clearAuthToken();
       if (onAuthFailure) onAuthFailure();
     }
   });
@@ -50,7 +85,10 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 
     cachedAccessToken = credential.accessToken;
     if (typeof window !== 'undefined') {
+      const expiresIn = 3500 * 1000; // ~1 hour validity window with buffer
+      const expiresAt = Date.now() + expiresIn;
       localStorage.setItem('google_access_token', cachedAccessToken);
+      localStorage.setItem('google_access_token_expires_at', expiresAt.toString());
     }
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
@@ -62,13 +100,14 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 };
 
 export const getAccessToken = async (): Promise<string | null> => {
-  return cachedAccessToken;
+  return getStoredAccessToken();
 };
 
 export const logout = async () => {
-  await signOut(auth);
-  cachedAccessToken = null;
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem('google_access_token');
+  try {
+    await signOut(auth);
+  } catch (e) {
+    console.warn('SignOut error:', e);
   }
+  clearAuthToken();
 };

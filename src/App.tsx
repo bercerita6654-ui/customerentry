@@ -45,7 +45,7 @@ import {
   Landmark
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { auth, initAuth, googleSignIn, logout, getAccessToken } from './firebase';
+import { auth, initAuth, googleSignIn, logout, getAccessToken, getStoredAccessToken, clearAuthToken } from './firebase';
 import { 
   fetchCustomersFromPublicCSV, 
   fetchCustomersFromSheetsAPI, 
@@ -180,6 +180,14 @@ export default function App() {
 
   // 1. Initialize Auth on mount
   useEffect(() => {
+    // Proactively check if stored token is expired on app launch
+    const validToken = getStoredAccessToken();
+    if (!validToken) {
+      clearAuthToken();
+      setAccessToken(null);
+      setNeedsAuth(true);
+    }
+
     const unsubscribe = initAuth(
       (user, token) => {
         setCurrentUser(user);
@@ -211,12 +219,11 @@ export default function App() {
       try {
         await logout();
       } catch (logoutErr) {
-        console.error('Error during automatic logout:', logoutErr);
+        console.warn('Error during automatic logout:', logoutErr);
       }
       setAccessToken(null);
       setCurrentUser(null);
       setNeedsAuth(true);
-      setError('Sesi Google Anda telah berakhir atau tidak valid. Silakan klik tombol "Masuk dengan Google" kembali untuk memperbarui akses.');
       return true;
     }
     return false;
@@ -262,17 +269,25 @@ export default function App() {
           const data = await fetchCustomersFromSheetsAPI(spreadsheetId, targetSheetName, forceAuthToken);
           setCustomers(data);
         } catch (apiErr: any) {
-          console.error('Failed reading live Sheets API, falling back to public CSV', apiErr);
+          console.warn('Live Sheets API read error, falling back to public CSV:', apiErr?.message || apiErr);
           const isAuthError = await checkAndHandleAuthError(apiErr);
-          if (!isAuthError) {
-            // Fallback to public CSV if Sheet ID matches the default one
-            if (spreadsheetId === DEFAULT_SPREADSHEET_ID) {
+          
+          // Always load from public CSV fallback if using default spreadsheet
+          if (spreadsheetId === DEFAULT_SPREADSHEET_ID) {
+            try {
               const data = await fetchCustomersFromPublicCSV(DEFAULT_CSV_URL);
               setCustomers(data);
-              setError('Menggunakan data cache publik. Login kembali atau pastikan hak akses jika ingin mengedit.');
-            } else {
-              throw apiErr;
+              if (isAuthError) {
+                setError('Sesi Google Anda telah berakhir. Data customer tetap ditampilkan dari data publik. Silakan klik "Masuk dengan Google" jika ingin mengedit.');
+              }
+            } catch (csvErr) {
+              console.warn('Public CSV fallback also failed:', csvErr);
+              if (!isAuthError) {
+                throw apiErr;
+              }
             }
+          } else if (!isAuthError) {
+            throw apiErr;
           }
         }
       } else {
