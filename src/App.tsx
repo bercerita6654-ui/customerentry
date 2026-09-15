@@ -28,6 +28,7 @@ import {
   Copy,
   Code,
   Printer,
+  Eye,
   ArrowUp,
   ArrowDown,
   Bold,
@@ -107,6 +108,16 @@ export default function App() {
   const [formKeterangan, setFormKeterangan] = useState('');
   const [formPembayaran, setFormPembayaran] = useState('');
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  
+  // Edit customer modal states
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editFormName, setEditFormName] = useState('');
+  const [editFormPhone, setEditFormPhone] = useState('');
+  const [editFormAddress, setEditFormAddress] = useState('');
+  const [editFormPriceUsed, setEditFormPriceUsed] = useState('');
+  const [editFormKeterangan, setEditFormKeterangan] = useState('');
+  const [editFormPembayaran, setEditFormPembayaran] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
 
   // UI state managers
   const [searchQuery, setSearchQuery] = useState('');
@@ -116,6 +127,10 @@ export default function App() {
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [tempSpreadsheetId, setTempSpreadsheetId] = useState(spreadsheetId);
   const [tempSheetName, setTempSheetName] = useState(sheetName);
+
+  // View customer details modal states
+  const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
+  const [showViewModal, setShowViewModal] = useState(false);
 
   // Thermal print states
   const [printingCustomer, setPrintingCustomer] = useState<Customer | null>(null);
@@ -129,7 +144,7 @@ export default function App() {
   const [copiedBank, setCopiedBank] = useState(false);
   const [printLines, setPrintLines] = useState<PrintLine[]>([]);
   const [printFontFamily, setPrintFontFamily] = useState<'mono' | 'sans' | 'serif'>('sans');
-  const [printBaseSize, setPrintBaseSize] = useState<'xs' | 'sm' | 'base' | 'lg'>('sm');
+  const [printBaseSize, setPrintBaseSize] = useState<'xs' | 'sm' | 'base' | 'lg'>('lg');
   const [activeLineIndex, setActiveLineIndex] = useState<number | null>(0);
 
   // Google Apps Script States
@@ -151,14 +166,15 @@ export default function App() {
   ];
 
   const statusPresets = [
-    'DI KIRIM',
-    'INSTAN COURIER (GOJEK, GOCAR,dll)',
-    'DIAMBIL'
+    'DIBANTU KIRIMKAN',
+    'DIAMBIL GOJEK',
+    'DIAMBIL CUSTOMER'
   ];
 
   const paymentPresets = [
     'TRANSFER',
     'CASH',
+    'LUNAS',
     'KREDIT'
   ];
 
@@ -285,68 +301,116 @@ export default function App() {
     loadData();
   }, [spreadsheetId, sheetName, accessToken, connectionMode, appsScriptUrl]);
 
+  // Helper to split name and phone if combined, and format phone in parentheses
+  const splitCustomerNameAndPhone = (rawName: string, rawPhone?: string) => {
+    let name = (rawName || '').trim();
+    let phone = (rawPhone || '').trim();
+
+    // Check if phone number is attached to the name, e.g. "PT. DIOR LINEN SENTOSA + PT. RATU BERJAYA MAKMUR (0812-4665-4192)"
+    const parenMatch = name.match(/^(.*?)\s*\(([\d\s\-\+\/]+)\)\s*$/);
+    if (parenMatch) {
+      name = parenMatch[1].trim();
+      if (!phone) {
+        phone = parenMatch[2].trim();
+      }
+    } else {
+      const rawMatch = name.match(/^(.*?)\s+(\+?62[\d\-\s]+|08[\d\-\s]+)\s*$/);
+      if (rawMatch) {
+        name = rawMatch[1].trim();
+        if (!phone) {
+          phone = rawMatch[2].trim();
+        }
+      }
+    }
+
+    // Format phone to standard (08xx-xxxx-xxxx)
+    let formattedPhone = '';
+    if (phone) {
+      const cleanPhone = phone.replace(/^\(+|\)+$/g, '').trim();
+      if (cleanPhone) {
+        formattedPhone = `(${cleanPhone})`;
+      }
+    }
+
+    return {
+      name: name.toUpperCase(),
+      phone: formattedPhone
+    };
+  };
+
   // Function to build default print lines from customer & option states
   const generateDefaultPrintLines = (customer: Customer, showSiapkan: boolean, showKet: boolean, showPem: boolean, showRek: boolean = false): PrintLine[] => {
     const lines: PrintLine[] = [];
     
-    // 1. Name & Phone
-    const nameUpper = customer.name.toUpperCase();
-    const phoneStr = customer.phone ? ` (${customer.phone})` : '';
+    // Parse name and phone to ensure separated lines and uppercase name
+    const parsed = splitCustomerNameAndPhone(customer.name, customer.phone);
+
+    // 1. Customer Name (Uppercase, bold on its own line)
     lines.push({
-      text: `${nameUpper}${phoneStr}`,
+      text: parsed.name,
       isBold: true,
-      size: 'md',
+      size: 'lg',
       align: 'left'
     });
+
+    // 2. Phone Number (Separated onto its own line!)
+    if (parsed.phone) {
+      lines.push({
+        text: parsed.phone,
+        isBold: true,
+        size: 'lg',
+        align: 'left'
+      });
+    }
     
-    // 2. Address
+    // 3. Address
     if (customer.address) {
       lines.push({
         text: customer.address,
         isBold: false,
-        size: 'sm',
+        size: 'lg',
         align: 'left'
       });
     }
     
-    // 3. Dibantu Siapkan
+    // 4. Dibantu Siapkan
     if (showSiapkan) {
       lines.push({
         text: '- DIBANTU SIAPKAN',
         isBold: false,
-        size: 'sm',
+        size: 'lg',
         align: 'left'
       });
     }
     
-    // 4. Keterangan
+    // 5. Keterangan
     if (showKet) {
-      const ketText = customer.keterangan ? `- ${customer.keterangan.toUpperCase()}` : '- DIKIRIM';
+      const ketText = customer.keterangan ? `- ${customer.keterangan.toUpperCase()}` : '- DIBANTU KIRIMKAN';
       lines.push({
         text: ketText,
         isBold: false,
-        size: 'sm',
+        size: 'lg',
         align: 'left'
       });
     }
     
-    // 5. Pembayaran
+    // 6. Pembayaran
     if (showPem) {
       const pemText = customer.pembayaran ? `- ${customer.pembayaran.toUpperCase()}` : '- TRANSFER';
       lines.push({
         text: pemText,
         isBold: false,
-        size: 'sm',
+        size: 'lg',
         align: 'left'
       });
     }
 
-    // 6. Rekening Perusahaan
+    // 7. Rekening Perusahaan
     if (showRek) {
       lines.push({
         text: '- BCA: 7445087998 (CV. GLOBAL JAYA SEJAHTERA)',
         isBold: false,
-        size: 'sm',
+        size: 'lg',
         align: 'left'
       });
     }
@@ -378,7 +442,7 @@ export default function App() {
 
   const handleAddLine = (index?: number) => {
     const insertAt = index !== undefined ? index + 1 : printLines.length;
-    const newLine: PrintLine = { text: '', isBold: false, size: 'sm', align: 'left' };
+    const newLine: PrintLine = { text: '', isBold: false, size: 'lg', align: 'left' };
     const newLines = [...printLines];
     newLines.splice(insertAt, 0, newLine);
     setPrintLines(newLines);
@@ -395,7 +459,7 @@ export default function App() {
   const handleDeleteLine = (index: number) => {
     if (printLines.length <= 1) {
       const newLines = [...printLines];
-      newLines[0] = { text: '', isBold: false, size: 'sm', align: 'left' };
+      newLines[0] = { text: '', isBold: false, size: 'lg', align: 'left' };
       setPrintLines(newLines);
       setActiveLineIndex(0);
       return;
@@ -500,13 +564,51 @@ export default function App() {
     }
   };
 
+  const handleQuickSetPayment = (val: string) => {
+    const formatted = `- ${val.toUpperCase()}`;
+    const newLines = [...printLines];
+    const payIdx = newLines.findIndex(l => 
+      /-\s*(TRANSFER|CASH|LUNAS|KREDIT|BAYAR)/i.test(l.text) || 
+      /^(TRANSFER|CASH|LUNAS|KREDIT)$/i.test(l.text.trim())
+    );
+    if (payIdx !== -1) {
+      newLines[payIdx] = { ...newLines[payIdx], text: formatted };
+      setActiveLineIndex(payIdx);
+    } else {
+      newLines.push({ text: formatted, isBold: false, size: 'lg', align: 'left' });
+      setActiveLineIndex(newLines.length - 1);
+    }
+    setPrintLines(newLines);
+    setOptPembayaran(true);
+    showToast(`Metode pembayaran diatur ke: ${val.toUpperCase()}`);
+  };
+
+  const handleQuickSetKeterangan = (val: string) => {
+    const formatted = `- ${val.toUpperCase()}`;
+    const newLines = [...printLines];
+    const ketIdx = newLines.findIndex(l => 
+      /-\s*(DIBANTU|KIRIM|GOJEK|DIAMBIL|CUSTOMER|INSTAN)/i.test(l.text) ||
+      /^(DIBANTU KIRIMKAN|DIAMBIL GOJEK|DIAMBIL CUSTOMER|DI KIRIM|DIAMBIL)$/i.test(l.text.trim())
+    );
+    if (ketIdx !== -1) {
+      newLines[ketIdx] = { ...newLines[ketIdx], text: formatted };
+      setActiveLineIndex(ketIdx);
+    } else {
+      newLines.push({ text: formatted, isBold: false, size: 'lg', align: 'left' });
+      setActiveLineIndex(newLines.length - 1);
+    }
+    setPrintLines(newLines);
+    setOptKeterangan(true);
+    showToast(`Keterangan pengiriman diatur ke: ${val.toUpperCase()}`);
+  };
+
   const handleStartPrint = (customer: Customer) => {
     setPrintingCustomer(customer);
     setOptDibantuSiapkan(true);
     setOptKeterangan(true);
     setOptPembayaran(true);
     setPrintFontFamily('sans');
-    setPrintBaseSize('sm');
+    setPrintBaseSize('lg');
     
     const initialLines = generateDefaultPrintLines(customer, true, true, true);
     setPrintLines(initialLines);
@@ -606,7 +708,7 @@ export default function App() {
     setError(null);
 
     const payload = {
-      name: formName.trim(),
+      name: formName.trim().toUpperCase(),
       phone: sanitizePhoneNumber(formPhone),
       address: formAddress.trim(),
       priceUsed: formPriceUsed.trim(),
@@ -693,18 +795,92 @@ export default function App() {
     }
   };
 
-  // Start editing a customer (populates the form)
+  // Start editing a customer (opens the pop up modal)
   const handleStartEdit = (customer: Customer) => {
+    const parsed = splitCustomerNameAndPhone(customer.name, customer.phone);
     setEditingCustomer(customer);
-    setFormName(customer.name);
-    setFormPhone(customer.phone);
-    setFormAddress(customer.address);
-    setFormPriceUsed(customer.priceUsed);
-    setFormKeterangan(customer.keterangan);
-    setFormPembayaran(customer.pembayaran);
-    
-    // Scroll smoothly to form on mobile devices
-    window.scrollTo({ top: 180, behavior: 'smooth' });
+    setEditFormName(parsed.name);
+    setEditFormPhone(parsed.phone ? parsed.phone.replace(/[\(\)]/g, '').trim() : customer.phone);
+    setEditFormAddress(customer.address);
+    setEditFormPriceUsed(customer.priceUsed);
+    setEditFormKeterangan(customer.keterangan);
+    setEditFormPembayaran(customer.pembayaran);
+    setShowEditModal(true);
+  };
+
+  const handleCloseEditModal = () => {
+    setShowEditModal(false);
+    setEditingCustomer(null);
+  };
+
+  const handleViewCustomer = (customer: Customer) => {
+    setViewingCustomer(customer);
+    setShowViewModal(true);
+  };
+
+  const handleCloseViewModal = () => {
+    setShowViewModal(false);
+    setViewingCustomer(null);
+  };
+
+  const handleUpdateCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCustomer) return;
+    if (!editFormName.trim()) {
+      setError('Nama customer wajib diisi.');
+      return;
+    }
+
+    setEditSaving(true);
+    setError(null);
+
+    const payload = {
+      name: editFormName.trim().toUpperCase(),
+      phone: sanitizePhoneNumber(editFormPhone),
+      address: editFormAddress.trim(),
+      priceUsed: editFormPriceUsed.trim(),
+      keterangan: editFormKeterangan.trim(),
+      pembayaran: editFormPembayaran.trim()
+    };
+
+    const updatedCustomer: Customer = {
+      ...editingCustomer,
+      ...payload
+    };
+
+    try {
+      if (connectionMode === 'apps-script') {
+        if (!appsScriptUrl.trim()) {
+          setError('Google Apps Script Web App URL tidak diatur. Silakan konfigurasikan di pengaturan.');
+          setEditSaving(false);
+          return;
+        }
+
+        await updateCustomerViaAppsScript(appsScriptUrl, updatedCustomer);
+        showToast(`Berhasil memperbarui data customer "${editFormName}" (via Apps Script)`);
+      } else {
+        if (!accessToken) {
+          setError('Anda harus masuk dengan Google untuk menginput data.');
+          setEditSaving(false);
+          return;
+        }
+
+        await updateCustomer(spreadsheetId, sheetName, accessToken, updatedCustomer);
+        showToast(`Berhasil memperbarui data customer "${editFormName}"`);
+      }
+
+      setShowEditModal(false);
+      setEditingCustomer(null);
+      await loadData();
+    } catch (err: any) {
+      console.error('Update error:', err);
+      const isAuthError = await checkAndHandleAuthError(err);
+      if (!isAuthError) {
+        setError('Gagal memperbarui data: ' + (err.message || err));
+      }
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   // Delete customer row
@@ -1181,10 +1357,10 @@ export default function App() {
                     type="text"
                     required
                     value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
-                    placeholder="e.g. John Doe"
+                    onChange={(e) => setFormName(e.target.value.toUpperCase())}
+                    placeholder="e.g. PT. DIOR LINEN SENTOSA"
                     disabled={!accessToken && connectionMode !== 'apps-script'}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:bg-white focus:border-blue-400 transition-all"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:bg-white focus:border-blue-400 transition-all uppercase font-semibold"
                   />
                 </div>
 
@@ -1351,81 +1527,6 @@ export default function App() {
                 </button>
               </form>
             </div>
-
-            {/* Company Bank Account Card */}
-            <div className="bg-gradient-to-br from-emerald-950 via-slate-900 to-slate-900 text-white rounded-3xl p-6 shadow-xl relative overflow-hidden border border-emerald-800/30">
-              <div className="absolute -right-6 -bottom-6 opacity-10 text-white pointer-events-none">
-                <Building2 className="w-36 h-36" />
-              </div>
-              <div className="relative z-10 space-y-3.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2.5">
-                    <div className="bg-emerald-500/20 border border-emerald-400/30 p-2 rounded-2xl text-emerald-300">
-                      <Building2 className="w-4.5 h-4.5" />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-widest block">Rekening Perusahaan</span>
-                      <span className="text-xs font-semibold text-slate-300">CV. GLOBAL JAYA SEJAHTERA</span>
-                    </div>
-                  </div>
-                  <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-bold px-2.5 py-1 rounded-full">
-                    BCA
-                  </span>
-                </div>
-
-                <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] text-emerald-200 font-bold uppercase tracking-wider">Bank BCA</p>
-                    <p className="text-xl font-mono font-bold text-white tracking-widest my-0.5">7445087998</p>
-                    <p className="text-[11px] font-semibold text-slate-300">a/n CV. GLOBAL JAYA SEJAHTERA</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleCopyBankAccount}
-                    className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-3.5 py-2.5 rounded-xl text-xs transition-all shadow-lg flex items-center space-x-1.5 cursor-pointer active:scale-95"
-                  >
-                    {copiedBank ? <Check className="w-4 h-4 text-slate-950" /> : <Copy className="w-4 h-4 text-slate-950" />}
-                    <span>{copiedBank ? 'Tersalin!' : 'Salin'}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-            
-            {/* Cloud Status Panel - Matches the premium Dark Sidebar widget exactly */}
-            <div className="bg-slate-900 text-white rounded-3xl p-6 shadow-xl">
-              <p className="text-xs text-slate-400 mb-1 font-bold uppercase tracking-wider">Cloud Status</p>
-              {connectionMode === 'apps-script' ? (
-                <>
-                  <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${appsScriptUrl ? 'bg-green-400 animate-pulse' : 'bg-amber-400'}`}></div>
-                    <p className="text-sm font-semibold">{appsScriptUrl ? 'Connected (Apps Script)' : 'Belum Terkonfigurasi'}</p>
-                  </div>
-                  <p className="text-[10px] text-slate-500 mt-2 break-all font-mono">
-                    {appsScriptUrl ? appsScriptUrl : 'Masukkan URL web app Apps Script Anda di menu Pengaturan.'}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${accessToken ? 'bg-green-400 animate-pulse' : 'bg-amber-400'}`}></div>
-                    <p className="text-sm font-semibold">{accessToken ? 'Connected to Sheet' : 'Read-Only Mode'}</p>
-                  </div>
-                  <p className="text-[10px] text-slate-500 mt-2 break-all font-mono">
-                    docs.google.com/sheets/d/{spreadsheetId}
-                  </p>
-                </>
-              )}
-              {connectionMode !== 'apps-script' && (
-                <a
-                  href={`https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`}
-                  target="_blank"
-                  referrerPolicy="no-referrer"
-                  className="mt-4 w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-bold rounded-xl text-center block transition-all"
-                >
-                  Open Google Sheets Workspace &rarr;
-                </a>
-              )}
-            </div>
           </section>
 
           {/* RIGHT COLUMN: Interactive Customer Table & Filter System */}
@@ -1467,11 +1568,10 @@ export default function App() {
                       onChange={(e) => setFilterKeterangan(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-600 outline-none cursor-pointer focus:bg-white focus:border-blue-400 transition-all appearance-none"
                     >
-                      <option value="all">Status: Semua</option>
-                      <option value="dikirim">Status: Dikirim</option>
-                      <option value="pending">Status: Pending</option>
-                      <option value="selesai">Status: Selesai</option>
-                      <option value="batal">Status: Batal</option>
+                      <option value="all">Keterangan: Semua</option>
+                      <option value="dibantu kirimkan">Keterangan: Dibantu Kirimkan</option>
+                      <option value="diambil gojek">Keterangan: Diambil Gojek</option>
+                      <option value="diambil customer">Keterangan: Diambil Customer</option>
                     </select>
                   </div>
 
@@ -1485,6 +1585,7 @@ export default function App() {
                       <option value="all">Bayar: Semua</option>
                       <option value="transfer">Bayar: Transfer</option>
                       <option value="cash">Bayar: Cash</option>
+                      <option value="lunas">Bayar: Lunas</option>
                       <option value="pending">Bayar: Pending</option>
                     </select>
                   </div>
@@ -1510,29 +1611,28 @@ export default function App() {
                   <table className="w-full text-left">
                     <thead>
                       <tr className="border-b border-slate-100">
-                        <th className="pb-4 text-xs font-bold text-slate-400 uppercase tracking-wider w-[25%]">Customer</th>
-                        <th className="pb-4 text-xs font-bold text-slate-400 uppercase tracking-wider w-[40%]">Alamat</th>
-                        <th className="pb-4 text-xs font-bold text-slate-400 uppercase tracking-wider w-[15%]">Harga</th>
-                        <th className="pb-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-right w-[20%]">Mode Pembayaran</th>
+                        <th className="pb-4 text-xs font-bold text-slate-400 uppercase tracking-wider w-[35%]">Customer</th>
+                        <th className="pb-4 text-xs font-bold text-slate-400 uppercase tracking-wider w-[45%]">Alamat</th>
+                        <th className="pb-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-right w-[20%]">Aksi</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                       {filteredCustomers.map((customer, idx) => {
                         const isKeteranganSelesai = customer.keterangan.toLowerCase().includes('kirim') || customer.keterangan.toLowerCase().includes('selesai');
-                        const isPembayaranOk = customer.pembayaran.toLowerCase().includes('transfer') || customer.pembayaran.toLowerCase().includes('cash') || customer.pembayaran.toLowerCase().includes('tunai');
+                        const parsed = splitCustomerNameAndPhone(customer.name, customer.phone);
 
                         return (
                           <tr key={customer.id} className="group hover:bg-slate-50/50 transition-colors">
                             <td className="py-4 pr-3">
                               <div className="flex flex-col space-y-1 text-sm">
-                                <span className="font-bold text-slate-900 break-words">{customer.name}</span>
-                                {customer.phone ? (
+                                <span className="font-bold text-slate-900 break-words uppercase">{parsed.name}</span>
+                                {parsed.phone ? (
                                   <div className="whitespace-nowrap">
                                     <a 
-                                      href={`tel:${customer.phone}`}
+                                      href={`tel:${parsed.phone.replace(/[\(\)\s\-]/g, '')}`}
                                       className="inline-flex items-center text-xs text-blue-600 hover:text-blue-800 font-bold hover:underline bg-blue-50/70 px-2 py-0.5 rounded-full font-mono whitespace-nowrap"
                                     >
-                                      {customer.phone}
+                                      {parsed.phone}
                                     </a>
                                   </div>
                                 ) : (
@@ -1560,65 +1660,39 @@ export default function App() {
                               )}
                             </td>
 
-                            <td className="py-4 pr-3 whitespace-nowrap">
-                              <span className="text-[11px] bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded whitespace-nowrap">
-                                {customer.priceUsed || 'default'}
-                              </span>
-                            </td>
-
                             <td className="py-4 text-right">
-                              <div className="flex flex-col items-end space-y-1.5">
-                                <div className="flex items-center gap-1.5">
-                                  {customer.keterangan && (
-                                    <span className={`px-2 py-0.5 text-[9px] font-bold rounded-md uppercase tracking-wider ${
-                                      isKeteranganSelesai 
-                                        ? 'bg-green-50 text-green-600' 
-                                        : 'bg-amber-50 text-amber-600'
-                                    }`}>
-                                      {customer.keterangan}
-                                    </span>
-                                  )}
-                                  {customer.pembayaran && (
-                                    <span className={`px-2 py-0.5 text-[9px] font-bold rounded-md uppercase tracking-wider ${
-                                      isPembayaranOk
-                                        ? 'bg-blue-50 text-blue-600'
-                                        : 'bg-rose-50 text-rose-600'
-                                    }`}>
-                                      {customer.pembayaran}
-                                    </span>
-                                  )}
-                                </div>
+                              <div className="flex flex-col items-end space-y-2">
+                                {customer.keterangan && (
+                                  <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded-md uppercase tracking-wider ${
+                                    isKeteranganSelesai 
+                                      ? 'bg-green-50 text-green-700 border border-green-200/60' 
+                                      : 'bg-amber-50 text-amber-700 border border-amber-200/60'
+                                  }`}>
+                                    {customer.keterangan}
+                                  </span>
+                                )}
 
-                                {/* Hover visible Action Controls */}
-                                <div className="flex items-center justify-end space-x-1 mt-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                                {/* Outer Action Controls: Only View & Print to keep the table uncluttered */}
+                                <div className="flex items-center justify-end gap-1.5 sm:gap-2">
+                                  {/* View Button - Indigo */}
+                                  <button
+                                    onClick={() => handleViewCustomer(customer)}
+                                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white border border-indigo-200/80 hover:border-indigo-600 shadow-xs hover:shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+                                    title="Lihat Detail Customer (Harga & Pembayaran)"
+                                    id={`btn-view-${customer.id}`}
+                                  >
+                                    <Eye className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
+                                  </button>
+
+                                  {/* Print Button - Emerald */}
                                   <button
                                     onClick={() => handleStartPrint(customer)}
-                                    className="p-1 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors cursor-pointer"
-                                    title="Print to Thermal Printer"
+                                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200/80 hover:border-emerald-600 shadow-xs hover:shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+                                    title="Cetak Struk Thermal"
                                     id={`btn-print-${customer.id}`}
                                   >
-                                    <Printer className="w-3.5 h-3.5" />
+                                    <Printer className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
                                   </button>
-                                  {(accessToken || connectionMode === 'apps-script') && (
-                                    <>
-                                      <button
-                                        onClick={() => handleStartEdit(customer)}
-                                        className="p-1 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded transition-colors cursor-pointer"
-                                        title="Edit record"
-                                        id={`btn-edit-${customer.id}`}
-                                      >
-                                        <Edit2 className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        onClick={() => handleDelete(customer)}
-                                        className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer"
-                                        title="Delete record"
-                                        id={`btn-delete-${customer.id}`}
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    </>
-                                  )}
                                 </div>
                               </div>
                             </td>
@@ -2190,8 +2264,8 @@ function doPost(e) {
                       </button>
                     </div>
 
-                    {/* Quick Config Presets */}
-                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/60 space-y-3">
+                    {/* Quick Config Presets (Hidden as requested) */}
+                    <div className="hidden bg-slate-50 p-4 rounded-2xl border border-slate-200/60 space-y-3">
                       <div className="flex items-center justify-between">
                         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Opsi Cepat Penerima</p>
                         <button
@@ -2250,6 +2324,49 @@ function doPost(e) {
                           />
                           <span>Rekening BCA</span>
                         </label>
+                      </div>
+
+                      {/* Quick Chips for Keterangan & Pembayaran (TRANSFER, CASH, LUNAS) */}
+                      <div className="pt-2.5 border-t border-slate-200/70 space-y-2">
+                        {/* Keterangan Pengiriman */}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mr-1">
+                            Keterangan:
+                          </span>
+                          {statusPresets.map((status) => (
+                            <button
+                              key={status}
+                              type="button"
+                              onClick={() => handleQuickSetKeterangan(status)}
+                              className="text-[10px] bg-white hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 border border-slate-200 text-slate-600 px-2 py-0.5 rounded-lg transition-all cursor-pointer font-semibold active:scale-95 shadow-2xs"
+                              title={`Terapkan Keterangan: ${status}`}
+                            >
+                              {status}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Metode Pembayaran */}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mr-1">
+                            Pembayaran:
+                          </span>
+                          {['TRANSFER', 'CASH', 'LUNAS'].map((pay) => (
+                            <button
+                              key={pay}
+                              type="button"
+                              onClick={() => handleQuickSetPayment(pay)}
+                              className={`text-[10px] px-2.5 py-0.5 rounded-lg transition-all cursor-pointer font-bold active:scale-95 shadow-2xs border ${
+                                pay === 'LUNAS'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
+                                  : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                              }`}
+                              title={`Terapkan Pembayaran: ${pay}`}
+                            >
+                              {pay}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
 
@@ -2497,6 +2614,42 @@ function doPost(e) {
                         </span>
                       </div>
 
+                      {/* Quick Pill Bar directly above notebook for Keterangan & Pembayaran */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Keterangan:</span>
+                          {statusPresets.map((ket) => (
+                            <button
+                              key={ket}
+                              type="button"
+                              onClick={() => handleQuickSetKeterangan(ket)}
+                              className="text-[10px] bg-white hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 border border-slate-200 text-slate-600 px-2 py-0.5 rounded-md font-semibold cursor-pointer active:scale-95 transition-all shadow-2xs"
+                              title={`Terapkan Keterangan: ${ket}`}
+                            >
+                              {ket}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Pembayaran:</span>
+                          {['TRANSFER', 'CASH', 'LUNAS'].map((pay) => (
+                            <button
+                              key={pay}
+                              type="button"
+                              onClick={() => handleQuickSetPayment(pay)}
+                              className={`text-[10px] px-2 py-0.5 rounded-md font-bold cursor-pointer active:scale-95 transition-all shadow-2xs border ${
+                                pay === 'LUNAS' 
+                                  ? 'bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200' 
+                                  : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                              }`}
+                              title={`Terapkan Pembayaran: ${pay}`}
+                            >
+                              {pay}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
                       {/* Luxurious warm cream notebook paper layout */}
                       <div className="bg-[#FCFBF8] border border-slate-300 rounded-2xl shadow-md p-6 min-h-[300px] flex flex-col justify-between max-h-[380px] overflow-y-auto relative ring-1 ring-black/5">
                         
@@ -2647,6 +2800,477 @@ function doPost(e) {
                       <p className="text-[8px] font-mono text-slate-400 uppercase tracking-widest">
                         {printPaperWidth} Thermal Printer Mode
                       </p>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL 4: EDIT CUSTOMER POPUP MODAL */}
+      <AnimatePresence>
+        {showEditModal && editingCustomer && (
+          <div className="fixed inset-0 z-50 overflow-y-auto" id="edit-customer-modal">
+            {/* Backdrop */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              onClick={handleCloseEditModal}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+            ></motion.div>
+
+            {/* Content Container */}
+            <div className="flex min-h-screen items-center justify-center p-4 relative">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden relative border border-slate-100 flex flex-col text-slate-800"
+              >
+                {/* Header */}
+                <div className="bg-slate-900 text-white p-6 flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2.5 bg-blue-500/20 border border-blue-400/30 rounded-2xl text-blue-400">
+                      <Edit2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <h3 className="font-bold text-base text-white">Edit Data Customer</h3>
+                        <span className="bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-mono px-2 py-0.5 rounded-full font-bold">
+                          Baris #{editingCustomer.id}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">Perbarui rincian pelanggan di Google Sheets</p>
+                    </div>
+                  </div>
+                  <button 
+                    type="button"
+                    onClick={handleCloseEditModal}
+                    className="text-slate-400 hover:text-white p-2 rounded-xl transition-colors cursor-pointer hover:bg-slate-800"
+                    id="btn-close-edit-modal"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Form Fields */}
+                <form onSubmit={handleUpdateCustomer} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto" id="edit-customer-form">
+                  {/* Nama Customer */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-600">
+                      Nama Customer <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editFormName}
+                      onChange={(e) => setEditFormName(e.target.value.toUpperCase())}
+                      placeholder="e.g. PT. DIOR LINEN SENTOSA"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:bg-white focus:border-blue-400 transition-all font-semibold text-slate-800 uppercase"
+                      id="input-edit-name"
+                    />
+                  </div>
+
+                  {/* No Telepon */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-600">
+                      No Telepon
+                    </label>
+                    <input
+                      type="text"
+                      value={editFormPhone}
+                      onChange={(e) => {
+                        let val = e.target.value;
+                        if (val.startsWith('+62')) {
+                          val = '0' + val.slice(3);
+                        } else if (val.startsWith('62') && val.length > 2) {
+                          val = '0' + val.slice(2);
+                        }
+                        setEditFormPhone(val);
+                      }}
+                      placeholder="e.g. 0812..."
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:bg-white focus:border-blue-400 transition-all font-medium text-slate-800"
+                      id="input-edit-phone"
+                    />
+                  </div>
+
+                  {/* Alamat Lengkap */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-600">
+                      Alamat Lengkap
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={editFormAddress}
+                      onChange={(e) => setEditFormAddress(e.target.value)}
+                      placeholder="e.g. Jl. Mahendradatta Selatan No. 2, Bali"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:bg-white focus:border-blue-400 resize-none transition-all font-medium text-slate-800"
+                      id="input-edit-address"
+                    />
+                  </div>
+
+                  {/* Harga Dipakai */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-600">
+                      Harga Dipakai
+                    </label>
+                    <input
+                      type="text"
+                      value={editFormPriceUsed}
+                      onChange={(e) => setEditFormPriceUsed(e.target.value)}
+                      placeholder="e.g. harga 2"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:bg-white focus:border-blue-400 transition-all font-medium text-slate-800"
+                      id="input-edit-price"
+                    />
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {pricePresets.map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setEditFormPriceUsed(p)}
+                          className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded-lg transition-colors cursor-pointer font-semibold"
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Keterangan Pengiriman */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-600">
+                      Keterangan Pengiriman
+                    </label>
+                    <input
+                      type="text"
+                      value={editFormKeterangan}
+                      onChange={(e) => setEditFormKeterangan(e.target.value)}
+                      placeholder="e.g. dikirim"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:bg-white focus:border-blue-400 transition-all font-medium text-slate-800"
+                      id="input-edit-keterangan"
+                    />
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {statusPresets.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setEditFormKeterangan(s)}
+                          className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded-lg transition-colors cursor-pointer font-semibold"
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Metode Pembayaran */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-600">
+                      Metode Pembayaran
+                    </label>
+                    <input
+                      type="text"
+                      value={editFormPembayaran}
+                      onChange={(e) => setEditFormPembayaran(e.target.value)}
+                      placeholder="e.g. transfer"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:bg-white focus:border-blue-400 transition-all font-medium text-slate-800"
+                      id="input-edit-pembayaran"
+                    />
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {paymentPresets.map((pay) => (
+                        <button
+                          key={pay}
+                          type="button"
+                          onClick={() => setEditFormPembayaran(pay)}
+                          className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded-lg transition-colors cursor-pointer font-semibold"
+                        >
+                          {pay}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Quick Copy Rekening Box */}
+                    <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-2xl p-3 flex items-center justify-between mt-2.5">
+                      <div className="flex items-center space-x-2.5">
+                        <div className="bg-emerald-600 text-white p-1.5 rounded-xl flex-shrink-0">
+                          <Landmark className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-bold text-emerald-950">BCA 7445087998</p>
+                          <p className="text-[10px] text-emerald-700 font-semibold">CV. GLOBAL JAYA SEJAHTERA</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleCopyBankAccount}
+                        className="bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-2.5 py-1.5 rounded-xl text-[10px] font-bold transition-all shadow-xs flex items-center space-x-1 cursor-pointer active:scale-95"
+                      >
+                        {copiedBank ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-emerald-600" />}
+                        <span>{copiedBank ? 'Tersalin' : 'Salin'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={handleCloseEditModal}
+                      disabled={editSaving}
+                      className="px-5 py-2.5 border border-slate-200 text-slate-600 hover:bg-slate-100 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                      id="btn-cancel-edit"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={editSaving}
+                      className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-blue-500/20 cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
+                      id="btn-save-edit"
+                    >
+                      {editSaving ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Menyimpan...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Simpan Perubahan</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL 5: VIEW CUSTOMER DETAIL MODAL (HARGA & MODE PEMBAYARAN) */}
+      <AnimatePresence>
+        {showViewModal && viewingCustomer && (
+          <div className="fixed inset-0 z-50 overflow-y-auto" id="view-customer-modal">
+            {/* Backdrop */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              onClick={handleCloseViewModal}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+            ></motion.div>
+
+            {/* Content Container */}
+            <div className="flex min-h-screen items-center justify-center p-4 relative">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-lg w-full overflow-hidden relative z-10"
+              >
+                {/* Modal Header */}
+                <div className="flex items-center justify-between p-6 border-b border-slate-100">
+                  <div className="flex items-center space-x-3">
+                    <div className="bg-indigo-50 text-indigo-600 p-2.5 rounded-2xl">
+                      <Eye className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-slate-800">Detail Customer</h3>
+                      <p className="text-xs text-slate-400">Row ID #{viewingCustomer.id}</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={handleCloseViewModal}
+                    className="text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+                    id="btn-close-view-customer-modal"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Modal Body */}
+                <div className="p-6 space-y-4">
+                  {/* Nama Customer & Telepon */}
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/60 space-y-2">
+                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Nama & Kontak Customer</div>
+                    <div className="text-base font-bold text-slate-900 uppercase">
+                      {splitCustomerNameAndPhone(viewingCustomer.name, viewingCustomer.phone).name}
+                    </div>
+                    {viewingCustomer.phone ? (
+                      <div className="flex items-center space-x-2 pt-1">
+                        <span className="text-xs font-semibold text-slate-500">Telepon:</span>
+                        <a 
+                          href={`tel:${viewingCustomer.phone.replace(/[\(\)\s\-]/g, '')}`}
+                          className="inline-flex items-center space-x-1.5 text-xs text-blue-600 font-bold bg-blue-50 px-2.5 py-1 rounded-lg hover:bg-blue-100 transition-colors"
+                        >
+                          <Phone className="w-3.5 h-3.5" />
+                          <span>{viewingCustomer.phone}</span>
+                        </a>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-400 italic">Nomor telepon belum diisi</span>
+                    )}
+                  </div>
+
+                  {/* Alamat Customer */}
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/60 space-y-1.5">
+                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Alamat Pengiriman</div>
+                    <p className="text-xs text-slate-700 font-medium whitespace-pre-wrap">
+                      {viewingCustomer.address || <span className="italic text-slate-400">Tidak ada alamat tercatat</span>}
+                    </p>
+                    {viewingCustomer.address && (
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(viewingCustomer.address)}`}
+                        target="_blank"
+                        referrerPolicy="no-referrer"
+                        className="inline-flex items-center space-x-1 text-xs text-blue-600 hover:text-blue-800 font-bold pt-1 hover:underline"
+                      >
+                        <MapPin className="w-3.5 h-3.5" />
+                        <span>Buka di Google Maps</span>
+                      </a>
+                    )}
+                  </div>
+
+                  {/* HIGHLIGHTED SECTION: HARGA & MODE PEMBAYARAN */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* HARGA */}
+                    <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-4 space-y-1.5">
+                      <div className="flex items-center space-x-1.5 text-amber-800 font-bold text-[11px] uppercase tracking-wider">
+                        <DollarSign className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Harga</span>
+                      </div>
+                      <div className="text-sm font-bold text-amber-950">
+                        {viewingCustomer.priceUsed ? (
+                          <span className="bg-amber-100/90 text-amber-900 px-2.5 py-1 rounded-lg border border-amber-300/60 inline-block font-mono">
+                            {viewingCustomer.priceUsed}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 italic text-xs font-normal">Belum diatur (Default)</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* MODE PEMBAYARAN */}
+                    <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-4 space-y-1.5">
+                      <div className="flex items-center space-x-1.5 text-emerald-800 font-bold text-[11px] uppercase tracking-wider">
+                        <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Mode Pembayaran</span>
+                      </div>
+                      <div className="text-sm font-bold text-emerald-950">
+                        {viewingCustomer.pembayaran ? (
+                          <span className="bg-emerald-100/90 text-emerald-900 px-2.5 py-1 rounded-lg border border-emerald-300/60 inline-block uppercase tracking-wide">
+                            {viewingCustomer.pembayaran}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 italic text-xs font-normal">Belum diatur</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Keterangan Pengiriman */}
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/60 space-y-1.5">
+                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Keterangan Pengiriman</div>
+                    <div>
+                      {viewingCustomer.keterangan ? (
+                        <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg border border-blue-200 inline-block font-semibold text-xs uppercase">
+                          {viewingCustomer.keterangan}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 italic text-xs font-normal">Tidak ada keterangan pengiriman</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Quick Copy Rekening Box */}
+                  <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-2xl p-3 flex items-center justify-between">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="bg-emerald-600 text-white p-1.5 rounded-xl flex-shrink-0">
+                        <Landmark className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-bold text-emerald-950">BCA 7445087998</p>
+                        <p className="text-[10px] text-emerald-700 font-semibold">CV. GLOBAL JAYA SEJAHTERA</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText('7445087998');
+                        showToast('No. Rekening BCA disalin!');
+                      }}
+                      className="px-2.5 py-1 bg-white hover:bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-lg border border-emerald-300 transition-colors flex items-center space-x-1 cursor-pointer"
+                      title="Salin Nomor Rekening"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>Salin</span>
+                    </button>
+                  </div>
+
+                  {/* Action Footer */}
+                  <div className="pt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100">
+                    {/* Left side: Hapus action */}
+                    <div>
+                      {(accessToken || connectionMode === 'apps-script') && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const target = viewingCustomer;
+                            handleCloseViewModal();
+                            handleDelete(target);
+                          }}
+                          className="px-3.5 py-2 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl transition-all flex items-center space-x-1.5 cursor-pointer border border-rose-200 active:scale-95"
+                          id="btn-view-modal-delete"
+                          title="Hapus record customer ini"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Hapus Data</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Right side: Cetak, Edit, Tutup */}
+                    <div className="flex items-center space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const target = viewingCustomer;
+                          handleCloseViewModal();
+                          handleStartPrint(target);
+                        }}
+                        className="px-3.5 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition-all flex items-center space-x-1.5 cursor-pointer border border-emerald-200 active:scale-95"
+                        id="btn-view-modal-print"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span>Cetak Struk</span>
+                      </button>
+                      {(accessToken || connectionMode === 'apps-script') && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const target = viewingCustomer;
+                            handleCloseViewModal();
+                            handleStartEdit(target);
+                          }}
+                          className="px-3.5 py-2 text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 rounded-xl transition-all flex items-center space-x-1.5 cursor-pointer border border-amber-200 active:scale-95"
+                          id="btn-view-modal-edit"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>Edit Data</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleCloseViewModal}
+                        className="px-3.5 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all cursor-pointer active:scale-95"
+                        id="btn-view-modal-close"
+                      >
+                        Tutup
+                      </button>
                     </div>
                   </div>
                 </div>
